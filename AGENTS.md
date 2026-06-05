@@ -35,6 +35,22 @@ Do not add advanced features before this loop works end to end.
 - Store match-level replicated state in GameState when possible.
 - Keep GameMode server-only.
 
+## Local Unreal Engine
+
+This project currently uses UE 5.7.
+
+Local engine path:
+
+`E:\UnrealEngine\UE_5.7`
+
+Useful editor build command:
+
+```powershell
+E:\UnrealEngine\UE_5.7\Engine\Build\BatchFiles\Build.bat Tencent_Edu_FPSEditor Win64 Development -Project="E:\Projects\UEProjects\Tencent_Edu_FPS\Tencent_Edu_FPS.uproject" -WaitMutex
+```
+
+If C++ changes add or remove `UPROPERTY`, `UFUNCTION`, `UCLASS`, reflected structs, or class layout used by Blueprints, close the editor and run the full build command instead of relying on Live Coding.
+
 ## Git Rules
 
 Commit source assets and project configuration needed to reopen the project:
