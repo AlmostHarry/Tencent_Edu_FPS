@@ -77,7 +77,7 @@ void AShooterNPCSpawner::OnNPCDied()
 	// is this the last NPC we should spawn?
 	if (SpawnCount <= 0)
 	{
-		return;
+		SpawnCount = 1;
 	}
 
 	// schedule the next NPC spawn

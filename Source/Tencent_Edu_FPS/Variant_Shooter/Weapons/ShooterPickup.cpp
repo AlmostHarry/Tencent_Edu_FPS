@@ -94,6 +94,9 @@ void AShooterPickup::RespawnPickup()
 	// unhide this pickup
 	SetActorHiddenInGame(false);
 
+	// make the pickup usable again even if the Blueprint respawn animation does not call FinishRespawn
+	FinishRespawn();
+
 	// call the BP handler
 	BP_OnRespawn();
 }
