@@ -1,0 +1,39 @@
+# Unreal Engine generated files
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+LocalBuilds/
+
+# IDE and editor state
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+*.user
+Config/DefaultEditorPerProjectUserSettings.ini
+
+# Project-local scratch content
+Backup/
+Content/Developers/
+
+# Logs, crash dumps, and upgrade artifacts
+*.log
+*.tmp
+*.bak
+UpgradeLog.htm
+
+# Packaged builds and recordings should be stored outside the repo unless explicitly needed
+Builds/
+Packages/
+Recordings/
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
