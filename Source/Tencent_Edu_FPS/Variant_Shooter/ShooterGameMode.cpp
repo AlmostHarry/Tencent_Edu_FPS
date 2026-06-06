@@ -40,6 +40,17 @@ void AShooterGameMode::EndPlay(EEndPlayReason::Type EndPlayReason)
 
 void AShooterGameMode::IncrementTeamScore(uint8 TeamByte)
 {
+	if (bMatchEnded)
+	{
+		return;
+	}
+
+	const EEduTeam ScoringTeam = static_cast<EEduTeam>(TeamByte);
+	if (ScoringTeam != EEduTeam::Red && ScoringTeam != EEduTeam::Blue)
+	{
+		return;
+	}
+
 	// retrieve the team score if any
 	int32 Score = 0;
 	if (int32* FoundScore = TeamScores.Find(TeamByte))
@@ -55,6 +66,11 @@ void AShooterGameMode::IncrementTeamScore(uint8 TeamByte)
 	if (ShooterUI)
 	{
 		ShooterUI->BP_UpdateScore(TeamByte, Score);
+	}
+
+	if (Score >= WinningScore)
+	{
+		FinishMatch(ScoringTeam);
 	}
 }
 
@@ -211,6 +227,11 @@ void AShooterGameMode::InitializeMatchSlots()
 
 void AShooterGameMode::FillUnoccupiedSlotsWithAI()
 {
+	if (bMatchEnded)
+	{
+		return;
+	}
+
 	for (int32 SlotIndex = 0; SlotIndex < MatchSlots.Num(); ++SlotIndex)
 	{
 		FEduManagedMatchSlot& Slot = MatchSlots[SlotIndex];
@@ -223,7 +244,7 @@ void AShooterGameMode::FillUnoccupiedSlotsWithAI()
 
 void AShooterGameMode::SpawnAIForSlot(int32 SlotArrayIndex)
 {
-	if (!AICharacterClass || !MatchSlots.IsValidIndex(SlotArrayIndex))
+	if (bMatchEnded || !AICharacterClass || !MatchSlots.IsValidIndex(SlotArrayIndex))
 	{
 		return;
 	}
@@ -254,6 +275,31 @@ void AShooterGameMode::SpawnAIForSlot(int32 SlotArrayIndex)
 	}
 }
 
+void AShooterGameMode::FinishMatch(EEduTeam WinningTeam)
+{
+	if (bMatchEnded)
+	{
+		return;
+	}
+
+	bMatchEnded = true;
+
+	for (FEduManagedMatchSlot& Slot : MatchSlots)
+	{
+		GetWorld()->GetTimerManager().ClearTimer(Slot.AIRespawnTimer);
+	}
+
+	const TCHAR* TeamName = WinningTeam == EEduTeam::Red ? TEXT("Red") : TEXT("Blue");
+	UE_LOG(LogTemp, Log, TEXT("%s team won the match with %d points."), TeamName, WinningScore);
+
+	if (AShooterPlayerController* PlayerController =
+		Cast<AShooterPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0)))
+	{
+		PlayerController->ShowMatchResult(WinningTeam);
+		PlayerController->SetPause(true);
+	}
+}
+
 int32 AShooterGameMode::FindSlotIndex(const FEduTeamSlotSelection& Selection) const
 {
 	return MatchSlots.IndexOfByPredicate([&Selection](const FEduManagedMatchSlot& Slot)
@@ -272,7 +318,7 @@ int32 AShooterGameMode::FindPlayerSlotIndex(const AShooterPlayerController* Play
 
 void AShooterGameMode::OnManagedAIDestroyed(AActor* DestroyedActor)
 {
-	if (bMatchShuttingDown)
+	if (bMatchShuttingDown || bMatchEnded)
 	{
 		return;
 	}

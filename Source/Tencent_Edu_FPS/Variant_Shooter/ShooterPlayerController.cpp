@@ -10,6 +10,7 @@
 #include "ShooterCharacter.h"
 #include "ShooterGameMode.h"
 #include "ShooterBulletCounterUI.h"
+#include "EduMatchResultWidget.h"
 #include "EduTeamSelectionWidget.h"
 #include "Tencent_Edu_FPS.h"
 #include "Widgets/Input/SVirtualJoystick.h"
@@ -126,6 +127,14 @@ void AShooterPlayerController::OnPawnDestroyed(AActor* DestroyedActor)
 		BulletCounterUI->BP_UpdateBulletCounter(0, 0);
 	}
 
+	if (const AShooterGameMode* GameMode = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		if (GameMode->IsMatchOver())
+		{
+			return;
+		}
+	}
+
 	FTransform SpawnTransform;
 	EEduTeam RespawnTeam = EEduTeam::Unassigned;
 	bool bHasManagedSpawn = false;
@@ -238,4 +247,33 @@ bool AShooterPlayerController::SelectTeamSlot(EEduTeam Team, int32 SlotIndex)
 	bShowMouseCursor = false;
 
 	return true;
+}
+
+void AShooterPlayerController::ShowMatchResult(EEduTeam WinningTeam)
+{
+	if (!IsLocalPlayerController() || MatchResultWidget)
+	{
+		return;
+	}
+
+	if (TeamSelectionWidget)
+	{
+		TeamSelectionWidget->RemoveFromParent();
+		TeamSelectionWidget = nullptr;
+	}
+
+	MatchResultWidget = CreateWidget<UEduMatchResultWidget>(this, UEduMatchResultWidget::StaticClass());
+	if (!MatchResultWidget)
+	{
+		UE_LOG(LogTencent_Edu_FPS, Error, TEXT("Could not spawn match result widget."));
+		return;
+	}
+
+	const bool bLocalPlayerWon = bHasSelectedTeamSlot && TeamSlotSelection.Team == WinningTeam;
+	MatchResultWidget->SetMatchWon(bLocalPlayerWon);
+	MatchResultWidget->AddToPlayerScreen(200);
+
+	FInputModeUIOnly InputMode;
+	SetInputMode(InputMode);
+	bShowMouseCursor = true;
 }

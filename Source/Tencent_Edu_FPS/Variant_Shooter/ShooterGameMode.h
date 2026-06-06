@@ -44,6 +44,10 @@ protected:
 	/** Map of scores by team ID */
 	TMap<uint8, int32> TeamScores;
 
+	/** Score required for a team to win the match */
+	UPROPERTY(EditDefaultsOnly, Category="Shooter|Match", meta=(ClampMin=1))
+	int32 WinningScore = 10;
+
 	/** Optional override for the AI class used to fill unoccupied slots */
 	UPROPERTY(EditAnywhere, Category="Shooter|Slots")
 	TSubclassOf<AShooterNPC> AICharacterClass;
@@ -79,14 +83,20 @@ public:
 	/** Returns the spawn transform and team assigned to a player */
 	bool GetPlayerSpawnData(const AShooterPlayerController* PlayerController, FTransform& OutTransform, EEduTeam& OutTeam) const;
 
+	/** Returns true after either team has reached the winning score */
+	bool IsMatchOver() const { return bMatchEnded; }
+
 private:
 
 	void InitializeMatchSlots();
 	void FillUnoccupiedSlotsWithAI();
 	void SpawnAIForSlot(int32 SlotArrayIndex);
+	void FinishMatch(EEduTeam WinningTeam);
 	int32 FindSlotIndex(const FEduTeamSlotSelection& Selection) const;
 	int32 FindPlayerSlotIndex(const AShooterPlayerController* PlayerController) const;
 
 	UFUNCTION()
 	void OnManagedAIDestroyed(AActor* DestroyedActor);
+
+	bool bMatchEnded = false;
 };

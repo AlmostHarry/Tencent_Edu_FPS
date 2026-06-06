@@ -10,6 +10,7 @@
 class UInputMappingContext;
 class AShooterCharacter;
 class UShooterBulletCounterUI;
+class UEduMatchResultWidget;
 class UEduTeamSelectionWidget;
 
 /**
@@ -64,6 +65,10 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UEduTeamSelectionWidget> TeamSelectionWidget;
 
+	/** Simple match result overlay */
+	UPROPERTY()
+	TObjectPtr<UEduMatchResultWidget> MatchResultWidget;
+
 	/** Team and slot selected by this player */
 	UPROPERTY(BlueprintReadOnly, Category="Shooter|Team", meta=(AllowPrivateAccess="true"))
 	FEduTeamSlotSelection TeamSlotSelection;
@@ -109,4 +114,7 @@ public:
 	/** Records a local player's team-slot choice */
 	UFUNCTION(BlueprintCallable, Category="Shooter|Team")
 	bool SelectTeamSlot(EEduTeam Team, int32 SlotIndex);
+
+	/** Shows WIN or LOSE based on the local player's selected team */
+	void ShowMatchResult(EEduTeam WinningTeam);
 };
