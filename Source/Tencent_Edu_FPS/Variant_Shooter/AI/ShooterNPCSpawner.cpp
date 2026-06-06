@@ -49,6 +49,12 @@ void AShooterNPCSpawner::EndPlay(EEndPlayReason::Type EndPlayReason)
 	GetWorld()->GetTimerManager().ClearTimer(SpawnTimer);
 }
 
+void AShooterNPCSpawner::DeactivateSpawner()
+{
+	SpawnCount = 0;
+	GetWorld()->GetTimerManager().ClearTimer(SpawnTimer);
+}
+
 void AShooterNPCSpawner::SpawnNPC()
 {
 	// ensure the NPC class is valid

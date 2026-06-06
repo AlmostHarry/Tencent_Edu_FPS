@@ -5,6 +5,7 @@
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -117,4 +118,48 @@ void ATencent_Edu_FPSCharacter::DoJumpEnd()
 {
 	// pass StopJumping to the character
 	StopJumping();
+}
+
+void ATencent_Edu_FPSCharacter::SetTeam(EEduTeam NewTeam)
+{
+	Team = NewTeam;
+	ApplyTeamVisuals();
+}
+
+bool ATencent_Edu_FPSCharacter::IsEnemy(const ATencent_Edu_FPSCharacter* Other) const
+{
+	return IsValid(Other)
+		&& Team != EEduTeam::Unassigned
+		&& Other->Team != EEduTeam::Unassigned
+		&& Team != Other->Team;
+}
+
+void ATencent_Edu_FPSCharacter::ApplyTeamVisuals()
+{
+	if (Team == EEduTeam::Unassigned)
+	{
+		return;
+	}
+
+	const FLinearColor TeamColor = Team == EEduTeam::Red ? RedTeamColor : BlueTeamColor;
+	USkeletalMeshComponent* Meshes[] = { GetMesh(), FirstPersonMesh };
+
+	for (USkeletalMeshComponent* MeshComponent : Meshes)
+	{
+		if (!MeshComponent)
+		{
+			continue;
+		}
+
+		const int32 MaterialCount = MeshComponent->GetNumMaterials();
+		for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
+		{
+			if (UMaterialInstanceDynamic* TeamMaterial = MeshComponent->CreateDynamicMaterialInstance(MaterialIndex))
+			{
+				TeamMaterial->SetVectorParameterValue(TEXT("Paint Tint"), TeamColor);
+				TeamMaterial->SetVectorParameterValue(TEXT("Base Color"), TeamColor);
+				TeamMaterial->SetVectorParameterValue(TEXT("LogoTint"), TeamColor);
+			}
+		}
+	}
 }

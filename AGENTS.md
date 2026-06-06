@@ -20,6 +20,42 @@ The first playable version must include:
 
 Do not add advanced features before this loop works end to end.
 
+## Current Implementation Status
+
+The current playable direction is a 2v2 team match with four logical slots:
+
+- Red team: `R1`, `R2`
+- Blue team: `B1`, `B2`
+- A local debug UI lets the first local player choose one slot.
+- The chosen slot determines the player's team and tagged `PlayerStart`.
+- Unoccupied slots are filled with the existing `BP_ShooterNPC` AI.
+- Managed AI slots respawn after death.
+- Players respawn at their previously selected slot.
+- Existing level NPC spawners are disabled while the slot system manages the 2v2 population.
+
+The level must contain at least two `PlayerStart` actors tagged `RED` and two tagged `BLUE`.
+If more exist, the slot system sorts them by world position and uses the first two for each team.
+
+Team identity is stored with `EEduTeam` on the shared character base:
+
+- AI perception only accepts characters on the opposing team as targets.
+- Friendly fire between characters on the same assigned team is blocked.
+- Kill score is awarded to the killer's team.
+- Character materials receive a red or blue runtime tint.
+- Default team colors can be changed in `BP_ShooterCharacter` and `BP_ShooterNPC` Class Defaults under `Team > Visuals`.
+
+This implementation is currently single-player/local only. Slot claims, AI population, team state, score,
+and material state have not yet been converted into replicated server-authoritative multiplayer systems.
+
+Important implementation files:
+
+- `Source/Tencent_Edu_FPS/Variant_Shooter/EduTeamSlotTypes.h`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/UI/EduTeamSelectionWidget.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterGameMode.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterPlayerController.*`
+- `Source/Tencent_Edu_FPS/Tencent_Edu_FPSCharacter.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/AI/ShooterAIController.*`
+
 ## Preferred Implementation
 
 - Prefer Blueprint for fast gameplay iteration.

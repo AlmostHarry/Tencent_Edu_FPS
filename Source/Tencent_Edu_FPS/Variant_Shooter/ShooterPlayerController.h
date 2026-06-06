@@ -3,12 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "EduTeamSlotTypes.h"
 #include "GameFramework/PlayerController.h"
 #include "ShooterPlayerController.generated.h"
 
 class UInputMappingContext;
 class AShooterCharacter;
 class UShooterBulletCounterUI;
+class UEduTeamSelectionWidget;
 
 /**
  *  Simple PlayerController for a first person shooter game
@@ -58,10 +60,25 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UShooterBulletCounterUI> BulletCounterUI;
 
+	/** Temporary team-slot selection UI for the first local player */
+	UPROPERTY()
+	TObjectPtr<UEduTeamSelectionWidget> TeamSelectionWidget;
+
+	/** Team and slot selected by this player */
+	UPROPERTY(BlueprintReadOnly, Category="Shooter|Team", meta=(AllowPrivateAccess="true"))
+	FEduTeamSlotSelection TeamSlotSelection;
+
+	/** True after this player has selected a valid team slot */
+	UPROPERTY(BlueprintReadOnly, Category="Shooter|Team", meta=(AllowPrivateAccess="true"))
+	bool bHasSelectedTeamSlot = false;
+
 protected:
 
 	/** Gameplay Initialization */
 	virtual void BeginPlay() override;
+
+	/** Gameplay cleanup */
+	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
 
 	/** Initialize input bindings */
 	virtual void SetupInputComponent() override;
@@ -83,4 +100,13 @@ protected:
 
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
+
+	/** Shows the temporary team-slot selector */
+	void ShowTeamSelection();
+
+public:
+
+	/** Records a local player's team-slot choice */
+	UFUNCTION(BlueprintCallable, Category="Shooter|Team")
+	bool SelectTeamSlot(EEduTeam Team, int32 SlotIndex);
 };

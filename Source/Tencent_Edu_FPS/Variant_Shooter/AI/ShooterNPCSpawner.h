@@ -59,6 +59,12 @@ public:
 	/** Cleanup */
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
 
+	/** Stops this legacy spawner when match slots manage AI population */
+	void DeactivateSpawner();
+
+	/** Returns the configured NPC class */
+	TSubclassOf<AShooterNPC> GetNPCClass() const { return NPCClass; }
+
 protected:
 
 	/** Spawn an NPC and subscribe to its death event */

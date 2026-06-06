@@ -142,7 +142,7 @@ public:
 protected:
 
 	/** Called when HP is depleted and the character should die */
-	void Die();
+	void Die(AController* KillerController);
 
 	/** Called after death to destroy the actor */
 	void DeferredDestruction();

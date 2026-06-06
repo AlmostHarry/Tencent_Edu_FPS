@@ -73,6 +73,9 @@ public:
 	/** Returns the targeted enemy */
 	AActor* GetCurrentTarget() const { return TargetEnemy; };
 
+	/** Returns true if the actor is a character on the opposing team */
+	bool IsEnemyActor(const AActor* Actor) const;
+
 protected:
 
 	/** Called when the AI perception component updates a perception on a given actor */

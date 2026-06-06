@@ -67,13 +67,21 @@ float AShooterCharacter::TakeDamage(float Damage, struct FDamageEvent const& Dam
 		return 0.0f;
 	}
 
+	if (const ATencent_Edu_FPSCharacter* Attacker = EventInstigator ? Cast<ATencent_Edu_FPSCharacter>(EventInstigator->GetPawn()) : nullptr)
+	{
+		if (GetTeam() != EEduTeam::Unassigned && GetTeam() == Attacker->GetTeam())
+		{
+			return 0.0f;
+		}
+	}
+
 	// Reduce HP
 	CurrentHP -= Damage;
 
 	// Have we depleted HP?
 	if (CurrentHP <= 0.0f)
 	{
-		Die();
+		Die(EventInstigator);
 	}
 
 	// update the HUD
@@ -282,7 +290,7 @@ AShooterWeapon* AShooterCharacter::FindWeaponOfType(TSubclassOf<AShooterWeapon> 
 
 }
 
-void AShooterCharacter::Die()
+void AShooterCharacter::Die(AController* KillerController)
 {
 	// deactivate the weapon
 	if (IsValid(CurrentWeapon))
@@ -290,10 +298,13 @@ void AShooterCharacter::Die()
 		CurrentWeapon->DeactivateWeapon();
 	}
 
-	// increment the team score
+	// increment the killer's team score
 	if (AShooterGameMode* GM = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
 	{
-		GM->IncrementTeamScore(TeamByte);
+		if (const ATencent_Edu_FPSCharacter* Killer = KillerController ? Cast<ATencent_Edu_FPSCharacter>(KillerController->GetPawn()) : nullptr)
+		{
+			GM->IncrementTeamScore(static_cast<uint8>(Killer->GetTeam()));
+		}
 	}
 
 	// grant the death tag to the character

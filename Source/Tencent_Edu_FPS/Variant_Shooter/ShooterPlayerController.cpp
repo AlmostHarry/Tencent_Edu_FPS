@@ -8,7 +8,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerStart.h"
 #include "ShooterCharacter.h"
+#include "ShooterGameMode.h"
 #include "ShooterBulletCounterUI.h"
+#include "EduTeamSelectionWidget.h"
 #include "Tencent_Edu_FPS.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 
@@ -48,8 +50,23 @@ void AShooterPlayerController::BeginPlay()
 			UE_LOG(LogTencent_Edu_FPS, Error, TEXT("Could not spawn bullet counter widget."));
 
 		}
-		
+
+		// Until multiplayer slot ownership exists, only the first local player may select a slot.
+		if (UGameplayStatics::GetPlayerController(GetWorld(), 0) == this)
+		{
+			ShowTeamSelection();
+		}
 	}
+}
+
+void AShooterPlayerController::EndPlay(EEndPlayReason::Type EndPlayReason)
+{
+	if (AShooterGameMode* GameMode = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		GameMode->ReleasePlayerSlot(this);
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void AShooterPlayerController::SetupInputComponent()
@@ -109,23 +126,32 @@ void AShooterPlayerController::OnPawnDestroyed(AActor* DestroyedActor)
 		BulletCounterUI->BP_UpdateBulletCounter(0, 0);
 	}
 
-	// find the player start
-	TArray<AActor*> ActorList;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), APlayerStart::StaticClass(), ActorList);
-
-	if (ActorList.Num() > 0)
+	FTransform SpawnTransform;
+	EEduTeam RespawnTeam = EEduTeam::Unassigned;
+	bool bHasManagedSpawn = false;
+	if (AShooterGameMode* GameMode = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
 	{
-		// select a random player start
-		AActor* RandomPlayerStart = ActorList[FMath::RandRange(0, ActorList.Num() - 1)];
+		bHasManagedSpawn = GameMode->GetPlayerSpawnData(this, SpawnTransform, RespawnTeam);
+	}
 
-		// spawn a character at the player start
-		const FTransform SpawnTransform = RandomPlayerStart->GetActorTransform();
-
-		if (AShooterCharacter* RespawnedCharacter = GetWorld()->SpawnActor<AShooterCharacter>(CharacterClass, SpawnTransform))
+	if (!bHasManagedSpawn)
+	{
+		TArray<AActor*> ActorList;
+		UGameplayStatics::GetAllActorsOfClass(GetWorld(), APlayerStart::StaticClass(), ActorList);
+		if (ActorList.Num() > 0)
 		{
-			// possess the character
-			Possess(RespawnedCharacter);
+			SpawnTransform = ActorList[FMath::RandRange(0, ActorList.Num() - 1)]->GetActorTransform();
 		}
+		else
+		{
+			return;
+		}
+	}
+
+	if (AShooterCharacter* RespawnedCharacter = GetWorld()->SpawnActor<AShooterCharacter>(CharacterClass, SpawnTransform))
+	{
+		RespawnedCharacter->SetTeam(RespawnTeam);
+		Possess(RespawnedCharacter);
 	}
 }
 
@@ -150,4 +176,66 @@ bool AShooterPlayerController::ShouldUseTouchControls() const
 {
 	// are we on a mobile platform? Should we force touch?
 	return SVirtualJoystick::ShouldDisplayTouchInterface() || bForceTouchControls;
+}
+
+void AShooterPlayerController::ShowTeamSelection()
+{
+	TeamSelectionWidget = CreateWidget<UEduTeamSelectionWidget>(this, UEduTeamSelectionWidget::StaticClass());
+	if (!TeamSelectionWidget)
+	{
+		UE_LOG(LogTencent_Edu_FPS, Error, TEXT("Could not spawn team selection widget."));
+		return;
+	}
+
+	TeamSelectionWidget->AddToPlayerScreen(100);
+
+	FInputModeUIOnly InputMode;
+	SetInputMode(InputMode);
+	bShowMouseCursor = true;
+}
+
+bool AShooterPlayerController::SelectTeamSlot(EEduTeam Team, int32 SlotIndex)
+{
+	if (!IsLocalPlayerController() || UGameplayStatics::GetPlayerController(GetWorld(), 0) != this)
+	{
+		return false;
+	}
+
+	FEduTeamSlotSelection RequestedSelection;
+	RequestedSelection.Team = Team;
+	RequestedSelection.SlotIndex = SlotIndex;
+	if (!RequestedSelection.IsValid())
+	{
+		return false;
+	}
+
+	if (AShooterGameMode* GameMode = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		if (!GameMode->ClaimPlayerSlot(this, RequestedSelection))
+		{
+			return false;
+		}
+	}
+	else
+	{
+		return false;
+	}
+
+	TeamSlotSelection = RequestedSelection;
+	bHasSelectedTeamSlot = true;
+
+	const TCHAR* TeamName = Team == EEduTeam::Red ? TEXT("Red") : TEXT("Blue");
+	UE_LOG(LogTencent_Edu_FPS, Log, TEXT("Local player selected team %s slot %d."), TeamName, SlotIndex);
+
+	if (TeamSelectionWidget)
+	{
+		TeamSelectionWidget->RemoveFromParent();
+		TeamSelectionWidget = nullptr;
+	}
+
+	FInputModeGameOnly InputMode;
+	SetInputMode(InputMode);
+	bShowMouseCursor = false;
+
+	return true;
 }

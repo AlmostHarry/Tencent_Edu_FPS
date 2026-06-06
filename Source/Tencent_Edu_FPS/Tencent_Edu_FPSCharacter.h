@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Variant_Shooter/EduTeamSlotTypes.h"
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
 #include "Tencent_Edu_FPSCharacter.generated.h"
@@ -48,6 +49,18 @@ protected:
 	/** Mouse Look Input Action */
 	UPROPERTY(EditAnywhere, Category ="Input")
 	class UInputAction* MouseLookAction;
+
+	/** Match team assigned by the slot system */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Team")
+	EEduTeam Team = EEduTeam::Unassigned;
+
+	/** Body tint used for red team characters */
+	UPROPERTY(EditDefaultsOnly, Category="Team|Visuals")
+	FLinearColor RedTeamColor = FLinearColor(0.8f, 0.02f, 0.02f, 1.0f);
+
+	/** Body tint used for blue team characters */
+	UPROPERTY(EditDefaultsOnly, Category="Team|Visuals")
+	FLinearColor BlueTeamColor = FLinearColor(0.02f, 0.08f, 0.8f, 1.0f);
 	
 public:
 	ATencent_Edu_FPSCharacter();
@@ -89,6 +102,23 @@ public:
 
 	/** Returns first person camera component **/
 	UCameraComponent* GetFirstPersonCameraComponent() const { return FirstPersonCameraComponent; }
+
+	/** Assigns this character to a match team */
+	UFUNCTION(BlueprintCallable, Category="Team")
+	void SetTeam(EEduTeam NewTeam);
+
+	/** Returns this character's match team */
+	UFUNCTION(BlueprintPure, Category="Team")
+	EEduTeam GetTeam() const { return Team; }
+
+	/** Returns true when both characters have assigned, different teams */
+	UFUNCTION(BlueprintPure, Category="Team")
+	bool IsEnemy(const ATencent_Edu_FPSCharacter* Other) const;
+
+private:
+
+	/** Applies the selected team color to first- and third-person meshes */
+	void ApplyTeamVisuals();
 
 };
 
