@@ -189,7 +189,7 @@ bool AShooterPlayerController::ShouldUseTouchControls() const
 
 void AShooterPlayerController::ShowTeamSelection()
 {
-	TeamSelectionWidget = CreateWidget<UEduTeamSelectionWidget>(this, UEduTeamSelectionWidget::StaticClass());
+	TeamSelectionWidget = CreateWidget<UEduTeamSelectionWidget>(this, TeamSelectionWidgetClass);
 	if (!TeamSelectionWidget)
 	{
 		UE_LOG(LogTencent_Edu_FPS, Error, TEXT("Could not spawn team selection widget."));

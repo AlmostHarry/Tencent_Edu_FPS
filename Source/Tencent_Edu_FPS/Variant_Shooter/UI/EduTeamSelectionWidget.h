@@ -4,10 +4,10 @@
 #include "Blueprint/UserWidget.h"
 #include "EduTeamSelectionWidget.generated.h"
 
-class SWidget;
+class UButton;
 
 /**
- * Temporary native team-slot selector used before the multiplayer lobby exists.
+ * UMG base class for the local team-slot selector.
  */
 UCLASS()
 class TENCENT_EDU_FPS_API UEduTeamSelectionWidget : public UUserWidget
@@ -16,13 +16,33 @@ class TENCENT_EDU_FPS_API UEduTeamSelectionWidget : public UUserWidget
 
 protected:
 
-	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void NativeConstruct() override;
 
 private:
 
-	FReply SelectRedSlotOne();
-	FReply SelectRedSlotTwo();
-	FReply SelectBlueSlotOne();
-	FReply SelectBlueSlotTwo();
-	FReply SelectSlot(uint8 TeamValue, int32 SlotIndex);
+	UFUNCTION()
+	void SelectRedSlotOne();
+
+	UFUNCTION()
+	void SelectRedSlotTwo();
+
+	UFUNCTION()
+	void SelectBlueSlotOne();
+
+	UFUNCTION()
+	void SelectBlueSlotTwo();
+
+	void SelectSlot(uint8 TeamValue, int32 SlotIndex);
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> RedSlotOneButton;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> RedSlotTwoButton;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> BlueSlotOneButton;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> BlueSlotTwoButton;
 };

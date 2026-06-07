@@ -57,6 +57,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
 	TSubclassOf<UEduMatchResultWidget> MatchResultWidgetClass;
 
+	/** Type of team-slot selection UI widget to spawn */
+	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
+	TSubclassOf<UEduTeamSelectionWidget> TeamSelectionWidgetClass;
+
 	/** Tag to grant the possessed pawn to flag it as the player */
 	UPROPERTY(EditAnywhere, Category="Shooter|Player")
 	FName PlayerPawnTag = FName("Player");
@@ -65,7 +69,7 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UShooterBulletCounterUI> BulletCounterUI;
 
-	/** Temporary team-slot selection UI for the first local player */
+	/** Team-slot selection UI for the first local player */
 	UPROPERTY()
 	TObjectPtr<UEduTeamSelectionWidget> TeamSelectionWidget;
 
