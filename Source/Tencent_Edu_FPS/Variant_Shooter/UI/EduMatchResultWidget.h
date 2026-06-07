@@ -4,10 +4,11 @@
 #include "Blueprint/UserWidget.h"
 #include "EduMatchResultWidget.generated.h"
 
-class SWidget;
+class UButton;
+class UTextBlock;
 
 /**
- * Minimal native overlay shown when a team reaches the winning score.
+ * UMG base class for the match result screen.
  */
 UCLASS()
 class TENCENT_EDU_FPS_API UEduMatchResultWidget : public UUserWidget
@@ -16,15 +17,27 @@ class TENCENT_EDU_FPS_API UEduMatchResultWidget : public UUserWidget
 
 public:
 
+	/** Updates the result displayed by the widget */
 	void SetMatchWon(bool bWon);
+
+	/** Restarts the current map and returns to team selection */
+	UFUNCTION(BlueprintCallable, Category="Match")
+	void RestartMatch();
 
 protected:
 
-	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void NativeConstruct() override;
 
-private:
+	/** Allows a Widget Blueprint to override result styling and animation */
+	UFUNCTION(BlueprintNativeEvent, Category="Match", meta=(DisplayName="Set Match Result"))
+	void BP_SetMatchResult(bool bWon);
+	virtual void BP_SetMatchResult_Implementation(bool bWon);
 
-	FReply RestartMatch();
+	/** WIN/LOSE label supplied by the Widget Blueprint */
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> ResultText;
 
-	bool bMatchWon = false;
+	/** Restart button supplied by the Widget Blueprint */
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> RestartButton;
 };

@@ -262,7 +262,7 @@ void AShooterPlayerController::ShowMatchResult(EEduTeam WinningTeam)
 		TeamSelectionWidget = nullptr;
 	}
 
-	MatchResultWidget = CreateWidget<UEduMatchResultWidget>(this, UEduMatchResultWidget::StaticClass());
+	MatchResultWidget = CreateWidget<UEduMatchResultWidget>(this, MatchResultWidgetClass);
 	if (!MatchResultWidget)
 	{
 		UE_LOG(LogTencent_Edu_FPS, Error, TEXT("Could not spawn match result widget."));
