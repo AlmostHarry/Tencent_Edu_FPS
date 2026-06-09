@@ -12,6 +12,7 @@ class APlayerStart;
 class AShooterCharacter;
 class AShooterNPC;
 class AShooterPlayerController;
+enum class EEduMatchMode : uint8;
 
 struct FEduManagedMatchSlot
 {
@@ -70,12 +71,16 @@ protected:
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
 
 public:
+	AShooterGameMode();
 
 	/** Increases the score for the given team */
 	void IncrementTeamScore(uint8 TeamByte);
 
 	/** Claims a free slot and moves the player's pawn to its spawn point */
 	bool ClaimPlayerSlot(AShooterPlayerController* PlayerController, const FEduTeamSlotSelection& Selection);
+
+	/** Accepts the listen server host's initial single-player/two-player choice */
+	bool SelectMatchMode(AShooterPlayerController* PlayerController, EEduMatchMode MatchMode);
 
 	/** Releases a player's occupied slot */
 	void ReleasePlayerSlot(AShooterPlayerController* PlayerController);
@@ -86,9 +91,16 @@ public:
 	/** Returns true after either team has reached the winning score */
 	bool IsMatchOver() const { return bMatchEnded; }
 
+	/** Restarts the current match for every connected player */
+	void RestartNetworkMatch();
+
 private:
 
 	void InitializeMatchSlots();
+	void TryStartMatch();
+	int32 GetRequiredHumanPlayerCount() const;
+	int32 GetSelectedHumanPlayerCount() const;
+	bool IsPlayerAllowedForCurrentMode(const AShooterPlayerController* PlayerController) const;
 	void FillUnoccupiedSlotsWithAI();
 	void SpawnAIForSlot(int32 SlotArrayIndex);
 	void FinishMatch(EEduTeam WinningTeam);
@@ -98,5 +110,6 @@ private:
 	UFUNCTION()
 	void OnManagedAIDestroyed(AActor* DestroyedActor);
 
+	bool bMatchPopulationStarted = false;
 	bool bMatchEnded = false;
 };

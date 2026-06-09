@@ -27,6 +27,11 @@ void AShooterAIController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
 
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	// ensure we're possessing an NPC
 	if (AShooterNPC* NPC = Cast<AShooterNPC>(InPawn))
 	{
@@ -43,11 +48,23 @@ void AShooterAIController::OnPossess(APawn* InPawn)
 
 void AShooterAIController::OnPawnDeath()
 {
+	UWorld* World = GetWorld();
+	if (!World || World->bIsTearingDown)
+	{
+		return;
+	}
+
 	// stop movement
-	GetPathFollowingComponent()->AbortMove(*this, FPathFollowingResultFlags::UserAbort);
+	if (UPathFollowingComponent* PathFollowing = GetPathFollowingComponent())
+	{
+		PathFollowing->AbortMove(*this, FPathFollowingResultFlags::UserAbort);
+	}
 
 	// stop StateTree logic
-	StateTreeAI->StopLogic(FString(""));
+	if (StateTreeAI && StateTreeAI->IsRunning())
+	{
+		StateTreeAI->StopLogic(FString(""));
+	}
 
 	// unpossess the pawn
 	UnPossess();

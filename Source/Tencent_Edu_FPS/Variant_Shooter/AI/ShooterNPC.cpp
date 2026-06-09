@@ -11,18 +11,21 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "TimerManager.h"
+#include "Net/UnrealNetwork.h"
 
 void AShooterNPC::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// spawn the weapon
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.Owner = this;
-	SpawnParams.Instigator = this;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	if (HasAuthority())
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = this;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	Weapon = GetWorld()->SpawnActor<AShooterWeapon>(WeaponClass, GetActorTransform(), SpawnParams);
+		Weapon = GetWorld()->SpawnActor<AShooterWeapon>(WeaponClass, GetActorTransform(), SpawnParams);
+	}
 }
 
 void AShooterNPC::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -33,8 +36,20 @@ void AShooterNPC::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	GetWorld()->GetTimerManager().ClearTimer(DeathTimer);
 }
 
+void AShooterNPC::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AShooterNPC, CurrentHP);
+	DOREPLIFETIME(AShooterNPC, bIsDead);
+}
+
 float AShooterNPC::TakeDamage(float Damage, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
+	if (!HasAuthority())
+	{
+		return 0.0f;
+	}
+
 	// ignore if already dead
 	if (bIsDead)
 	{
@@ -159,13 +174,14 @@ void AShooterNPC::OnSemiWeaponRefire()
 void AShooterNPC::Die(AController* KillerController)
 {
 	// ignore if already dead
-	if (bIsDead)
+	if (!HasAuthority() || bIsDead)
 	{
 		return;
 	}
 
 	// raise the dead flag
 	bIsDead = true;
+	CurrentHP = 0.0f;
 
 	// grant the death tag to the character
 	Tags.Add(DeathTag);
@@ -182,29 +198,28 @@ void AShooterNPC::Die(AController* KillerController)
 		}
 	}
 
-	// disable capsule collision
-	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-	// stop movement
-	GetCharacterMovement()->StopMovementImmediately();
-	GetCharacterMovement()->StopActiveMovement();
-
-	// enable ragdoll physics on the third person mesh
-	GetMesh()->SetCollisionProfileName(RagdollCollisionProfile);
-	GetMesh()->SetSimulatePhysics(true);
-	GetMesh()->SetPhysicsBlendWeight(1.0f);
+	HandleDeathVisuals();
 
 	// schedule actor destruction
 	GetWorld()->GetTimerManager().SetTimer(DeathTimer, this, &AShooterNPC::DeferredDestruction, DeferredDestructionTime, false);
+	ForceNetUpdate();
 }
 
 void AShooterNPC::DeferredDestruction()
 {
-	Destroy();
+	if (HasAuthority())
+	{
+		Destroy();
+	}
 }
 
 void AShooterNPC::StartShooting(AActor* ActorToShoot)
 {
+	if (!HasAuthority() || !Weapon || bIsDead)
+	{
+		return;
+	}
+
 	// save the aim target
 	CurrentAimTarget = ActorToShoot;
 
@@ -221,5 +236,30 @@ void AShooterNPC::StopShooting()
 	bIsShooting = false;
 
 	// signal the weapon
-	Weapon->StopFiring();
+	if (Weapon)
+	{
+		Weapon->StopFiring();
+	}
+}
+
+void AShooterNPC::OnRep_CurrentHP()
+{
+}
+
+void AShooterNPC::OnRep_IsDead()
+{
+	if (bIsDead)
+	{
+		HandleDeathVisuals();
+	}
+}
+
+void AShooterNPC::HandleDeathVisuals()
+{
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->StopActiveMovement();
+	GetMesh()->SetCollisionProfileName(RagdollCollisionProfile);
+	GetMesh()->SetSimulatePhysics(true);
+	GetMesh()->SetPhysicsBlendWeight(1.0f);
 }

@@ -16,6 +16,8 @@
 AShooterProjectile::AShooterProjectile()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	bReplicates = true;
+	SetReplicateMovement(true);
 
 	// create the collision component and assign it as the root
 	RootComponent = CollisionComponent = CreateDefaultSubobject<USphereComponent>(TEXT("Collision Component"));
@@ -54,6 +56,11 @@ void AShooterProjectile::EndPlay(EEndPlayReason::Type EndPlayReason)
 
 void AShooterProjectile::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Other, class UPrimitiveComponent* OtherComp, bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit)
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	// ignore if we've already hit something else
 	if (bHit)
 	{
@@ -61,9 +68,6 @@ void AShooterProjectile::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Ot
 	}
 
 	bHit = true;
-
-	// disable collision on the projectile
-	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	// make AI perception noise
 	MakeNoise(NoiseLoudness, GetInstigator(), GetActorLocation(), NoiseRange, NoiseTag);
@@ -81,8 +85,7 @@ void AShooterProjectile::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Ot
 
 	}
 
-	// pass control to BP for any extra effects
-	BP_OnProjectileHit(Hit);
+	MulticastProjectileHit(Hit);
 
 	// check if we should schedule deferred destruction of the projectile
 	if (DeferredDestructionTime > 0.0f)
@@ -94,6 +97,14 @@ void AShooterProjectile::NotifyHit(class UPrimitiveComponent* MyComp, AActor* Ot
 		// destroy the projectile right away
 		Destroy();
 	}
+}
+
+void AShooterProjectile::MulticastProjectileHit_Implementation(const FHitResult& Hit)
+{
+	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ProjectileMovement->StopMovementImmediately();
+	ProjectileMovement->Deactivate();
+	BP_OnProjectileHit(Hit);
 }
 
 void AShooterProjectile::ExplosionCheck(const FVector& ExplosionCenter)

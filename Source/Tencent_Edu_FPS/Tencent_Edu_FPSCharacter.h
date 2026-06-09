@@ -51,7 +51,7 @@ protected:
 	class UInputAction* MouseLookAction;
 
 	/** Match team assigned by the slot system */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Team")
+	UPROPERTY(ReplicatedUsing=OnRep_Team, VisibleInstanceOnly, BlueprintReadOnly, Category="Team")
 	EEduTeam Team = EEduTeam::Unassigned;
 
 	/** Body tint used for red team characters */
@@ -66,6 +66,8 @@ public:
 	ATencent_Edu_FPSCharacter();
 
 protected:
+
+	virtual void BeginPlay() override;
 
 	/** Called from Input Actions for movement input */
 	void MoveInput(const FInputActionValue& Value);
@@ -93,6 +95,15 @@ protected:
 
 	/** Set up input action bindings */
 	virtual void SetupPlayerInputComponent(UInputComponent* InputComponent) override;
+
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void OnRep_Controller() override;
+	virtual void PawnClientRestart() override;
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	/** First-person animation must only run for the locally controlled pawn */
+	void RefreshFirstPersonPresentation();
 	
 
 public:
@@ -116,6 +127,8 @@ public:
 	bool IsEnemy(const ATencent_Edu_FPSCharacter* Other) const;
 
 private:
+	UFUNCTION()
+	void OnRep_Team();
 
 	/** Applies the selected team color to first- and third-person meshes */
 	void ApplyTeamVisuals();

@@ -13,6 +13,7 @@
 AShooterPickup::AShooterPickup()
 {
  	PrimaryActorTick.bCanEverTick = true;
+	bReplicates = true;
 
 	// create the root
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
@@ -70,6 +71,11 @@ void AShooterPickup::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AShooterPickup::OnOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	// have we collided against a weapon holder?
 	if (IShooterWeaponHolder* WeaponHolder = Cast<IShooterWeaponHolder>(OtherActor))
 	{
@@ -91,6 +97,11 @@ void AShooterPickup::OnOverlap(UPrimitiveComponent* OverlappedComponent, AActor*
 
 void AShooterPickup::RespawnPickup()
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	// unhide this pickup
 	SetActorHiddenInGame(false);
 

@@ -44,12 +44,27 @@ Team identity is stored with `EEduTeam` on the shared character base:
 - Character materials receive a red or blue runtime tint.
 - Default team colors can be changed in `BP_ShooterCharacter` and `BP_ShooterNPC` Class Defaults under `Team > Visuals`.
 
-This implementation is currently single-player/local only. Slot claims, AI population, team state, score,
-and material state have not yet been converted into replicated server-authoritative multiplayer systems.
+An initial server-authoritative multiplayer pass is now implemented:
+
+- Human slot selection is requested through a server RPC and validated by `ShooterGameMode`.
+- Human players can replace AI occupants in managed match slots.
+- Team and character state replicate from the server.
+- Player firing requests run on the server; weapons, ammo, projectiles, damage, and deaths use server authority.
+- AI spawning and decisions remain server-only while NPC movement and death state replicate.
+- Team scores and the winning team replicate through `EduShooterGameState`.
+- Human team-slot identity replicates through `EduShooterPlayerState`.
+- Each local player owns their HUD, team selector, and match result UI.
+- Match restart is requested from a client and performed by server travel.
+
+This is an initial networking implementation, not final multiplayer verification. It still requires a
+two-player Listen Server PIE test covering slot contention, shooting from both clients, damage, death,
+respawn, score, victory, and restart under simulated latency.
 
 Important implementation files:
 
 - `Source/Tencent_Edu_FPS/Variant_Shooter/EduTeamSlotTypes.h`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/EduShooterGameState.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/EduShooterPlayerState.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/UI/EduTeamSelectionWidget.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterGameMode.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterPlayerController.*`
@@ -110,6 +125,10 @@ Do not commit generated local files:
 - `.sln`
 - packaged builds
 - local recordings
+
+`Content/XL_FPSPack/` contains imported third-party assets that are not currently
+used by the MVP. Leave this directory untracked for now; do not add or commit it
+unless the project begins depending on those assets.
 
 If any required `.uasset` or `.umap` file is larger than GitHub's normal file limit, use Git LFS or replace/compress the asset before submission.
 

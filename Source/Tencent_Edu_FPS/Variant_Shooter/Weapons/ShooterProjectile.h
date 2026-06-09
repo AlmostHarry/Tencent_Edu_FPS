@@ -99,6 +99,10 @@ protected:
 	/** Processes a projectile hit for the given actor */
 	void ProcessHit(AActor* HitActor, UPrimitiveComponent* HitComp, const FVector& HitLocation, const FVector& HitDirection);
 
+	/** Stops the projectile and plays impact effects on every connected machine */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastProjectileHit(const FHitResult& Hit);
+
 	/** Passes control to Blueprint to implement any effects on hit. */
 	UFUNCTION(BlueprintImplementableEvent, Category="Projectile", meta = (DisplayName = "On Projectile Hit"))
 	void BP_OnProjectileHit(const FHitResult& Hit);

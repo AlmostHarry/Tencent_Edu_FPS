@@ -56,6 +56,7 @@ protected:
 	float MaxHP = 500.0f;
 
 	/** Current HP remaining to this character */
+	UPROPERTY(ReplicatedUsing=OnRep_CurrentHP)
 	float CurrentHP = 0.0f;
 
 	/** Team ID for this character*/
@@ -70,12 +71,22 @@ protected:
 	TArray<AShooterWeapon*> OwnedWeapons;
 
 	/** Weapon currently equipped and ready to shoot with */
+	UPROPERTY(ReplicatedUsing=OnRep_CurrentWeapon)
 	TObjectPtr<AShooterWeapon> CurrentWeapon;
+
+	UPROPERTY(ReplicatedUsing=OnRep_IsDead)
+	bool bIsDead = false;
 
 	UPROPERTY(EditAnywhere, Category ="Destruction", meta = (ClampMin = 0, ClampMax = 10, Units = "s"))
 	float RespawnTime = 5.0f;
 
 	FTimerHandle RespawnTimer;
+
+	/** Most recent client-provided aim target used by the authoritative weapon */
+	FVector ServerWeaponTargetLocation = FVector::ZeroVector;
+
+	bool bHasServerWeaponTarget = false;
+	bool bLocallyWantsToFire = false;
 
 public:
 
@@ -100,6 +111,8 @@ protected:
 
 	/** Set up input action bindings */
 	virtual void SetupPlayerInputComponent(UInputComponent* InputComponent) override;
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 public:
 
@@ -131,6 +144,19 @@ public:
 	/** Handles switch weapon input */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	void DoSwitchWeapon();
+
+protected:
+	UFUNCTION(Server, Reliable)
+	void ServerStartFiring(FVector_NetQuantize AimTarget);
+
+	UFUNCTION(Server, Reliable)
+	void ServerStopFiring();
+
+	UFUNCTION(Server, Unreliable)
+	void ServerUpdateAimTarget(FVector_NetQuantize AimTarget);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSwitchWeapon();
 
 public:
 
@@ -179,6 +205,20 @@ protected:
 
 	/** Called from the respawn timer to destroy this character and force the PC to respawn */
 	void OnRespawn();
+
+	UFUNCTION()
+	void OnRep_CurrentHP();
+
+	UFUNCTION()
+	void OnRep_CurrentWeapon();
+
+	UFUNCTION()
+	void OnRep_IsDead();
+
+	void HandleDeathVisuals();
+	bool CanProcessGameplayInput() const;
+	FVector CalculateLocalWeaponTargetLocation() const;
+	void SetServerWeaponTargetLocation(const FVector& AimTarget);
 
 public:
 

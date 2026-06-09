@@ -9,10 +9,14 @@
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Net/UnrealNetwork.h"
 #include "Tencent_Edu_FPS.h"
 
 ATencent_Edu_FPSCharacter::ATencent_Edu_FPSCharacter()
 {
+	bReplicates = true;
+	SetReplicateMovement(true);
+
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(55.f, 96.0f);
 	
@@ -43,6 +47,30 @@ ATencent_Edu_FPSCharacter::ATencent_Edu_FPSCharacter()
 	// Configure character movement
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 	GetCharacterMovement()->AirControl = 0.5f;
+}
+
+void ATencent_Edu_FPSCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+	RefreshFirstPersonPresentation();
+}
+
+void ATencent_Edu_FPSCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	RefreshFirstPersonPresentation();
+}
+
+void ATencent_Edu_FPSCharacter::OnRep_Controller()
+{
+	Super::OnRep_Controller();
+	RefreshFirstPersonPresentation();
+}
+
+void ATencent_Edu_FPSCharacter::PawnClientRestart()
+{
+	Super::PawnClientRestart();
+	RefreshFirstPersonPresentation();
 }
 
 void ATencent_Edu_FPSCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -120,9 +148,26 @@ void ATencent_Edu_FPSCharacter::DoJumpEnd()
 	StopJumping();
 }
 
+void ATencent_Edu_FPSCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ATencent_Edu_FPSCharacter, Team);
+}
+
 void ATencent_Edu_FPSCharacter::SetTeam(EEduTeam NewTeam)
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	Team = NewTeam;
+	ApplyTeamVisuals();
+	ForceNetUpdate();
+}
+
+void ATencent_Edu_FPSCharacter::OnRep_Team()
+{
 	ApplyTeamVisuals();
 }
 
@@ -162,4 +207,16 @@ void ATencent_Edu_FPSCharacter::ApplyTeamVisuals()
 			}
 		}
 	}
+}
+
+void ATencent_Edu_FPSCharacter::RefreshFirstPersonPresentation()
+{
+	if (!FirstPersonMesh)
+	{
+		return;
+	}
+
+	const bool bLocallyControlled = IsLocallyControlled();
+	FirstPersonMesh->SetComponentTickEnabled(bLocallyControlled);
+	FirstPersonMesh->SetVisibility(bLocallyControlled, true);
 }

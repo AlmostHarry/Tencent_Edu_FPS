@@ -2,8 +2,7 @@
 
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
-#include "GameFramework/PlayerController.h"
-#include "Kismet/GameplayStatics.h"
+#include "ShooterPlayerController.h"
 
 void UEduMatchResultWidget::SetMatchWon(bool bWon)
 {
@@ -26,14 +25,8 @@ void UEduMatchResultWidget::BP_SetMatchResult_Implementation(bool bWon)
 
 void UEduMatchResultWidget::RestartMatch()
 {
-	if (APlayerController* PlayerController = GetOwningPlayer())
+	if (AShooterPlayerController* PlayerController = Cast<AShooterPlayerController>(GetOwningPlayer()))
 	{
-		PlayerController->SetPause(false);
-	}
-
-	const FString LevelName = UGameplayStatics::GetCurrentLevelName(this, true);
-	if (!LevelName.IsEmpty())
-	{
-		UGameplayStatics::OpenLevel(this, FName(*LevelName));
+		PlayerController->RequestRestartMatch();
 	}
 }

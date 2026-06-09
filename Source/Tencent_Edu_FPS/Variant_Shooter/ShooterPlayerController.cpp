@@ -5,15 +5,31 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
+#include "UObject/ConstructorHelpers.h"
 #include "Kismet/GameplayStatics.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerStart.h"
 #include "ShooterCharacter.h"
 #include "ShooterGameMode.h"
+#include "EduShooterGameState.h"
+#include "EduShooterPlayerState.h"
 #include "ShooterBulletCounterUI.h"
+#include "ShooterUI.h"
 #include "EduMatchResultWidget.h"
+#include "EduMatchModeWidget.h"
 #include "EduTeamSelectionWidget.h"
 #include "Tencent_Edu_FPS.h"
 #include "Widgets/Input/SVirtualJoystick.h"
+
+AShooterPlayerController::AShooterPlayerController()
+{
+	static ConstructorHelpers::FClassFinder<UShooterUI> ShooterUIFinder(
+		TEXT("/Game/Variant_Shooter/UI/UI_Shooter"));
+	if (ShooterUIFinder.Succeeded())
+	{
+		ShooterUIClass = ShooterUIFinder.Class;
+	}
+}
 
 void AShooterPlayerController::BeginPlay()
 {
@@ -52,22 +68,45 @@ void AShooterPlayerController::BeginPlay()
 
 		}
 
-		// Until multiplayer slot ownership exists, only the first local player may select a slot.
-		if (UGameplayStatics::GetPlayerController(GetWorld(), 0) == this)
+		ShooterUI = CreateWidget<UShooterUI>(this, ShooterUIClass);
+		if (ShooterUI)
 		{
-			ShowTeamSelection();
+			ShooterUI->AddToPlayerScreen(0);
 		}
+
+		BindToShooterGameState();
+		InitializePossessedPawn(GetPawn());
 	}
 }
 
 void AShooterPlayerController::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
-	if (AShooterGameMode* GameMode = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
+	UWorld* World = GetWorld();
+	if (World)
 	{
-		GameMode->ReleasePlayerSlot(this);
+		if (AEduShooterGameState* ShooterGameState = World->GetGameState<AEduShooterGameState>())
+		{
+			ShooterGameState->OnTeamScoreChanged.RemoveAll(this);
+			ShooterGameState->OnMatchEnded.RemoveAll(this);
+			ShooterGameState->OnMatchSetupChanged.RemoveAll(this);
+		}
+	}
+
+	if (EndPlayReason != EEndPlayReason::EndPlayInEditor && World && !World->bIsTearingDown)
+	{
+		if (AShooterGameMode* GameMode = Cast<AShooterGameMode>(World->GetAuthGameMode()))
+		{
+			GameMode->ReleasePlayerSlot(this);
+		}
 	}
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void AShooterPlayerController::OnRep_Pawn()
+{
+	Super::OnRep_Pawn();
+	InitializePossessedPawn(GetPawn());
 }
 
 void AShooterPlayerController::SetupInputComponent()
@@ -100,9 +139,24 @@ void AShooterPlayerController::SetupInputComponent()
 void AShooterPlayerController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
+	InitializePossessedPawn(InPawn);
+
+	if (HasAuthority())
+	{
+		const AEduShooterPlayerState* ShooterPlayerState = GetPlayerState<AEduShooterPlayerState>();
+		SetPawnWaitingForMatch(!ShooterPlayerState || !ShooterPlayerState->HasSelectedTeamSlot());
+	}
+}
+
+void AShooterPlayerController::InitializePossessedPawn(APawn* InPawn)
+{
+	if (!IsValid(InPawn))
+	{
+		return;
+	}
 
 	// subscribe to the pawn's OnDestroyed delegate
-	InPawn->OnDestroyed.AddDynamic(this, &AShooterPlayerController::OnPawnDestroyed);
+	InPawn->OnDestroyed.AddUniqueDynamic(this, &AShooterPlayerController::OnPawnDestroyed);
 
 	// is this a shooter character?
 	if (AShooterCharacter* ShooterCharacter = Cast<AShooterCharacter>(InPawn))
@@ -111,8 +165,8 @@ void AShooterPlayerController::OnPossess(APawn* InPawn)
 		ShooterCharacter->Tags.Add(PlayerPawnTag);
 
 		// subscribe to the pawn's delegates
-		ShooterCharacter->OnBulletCountUpdated.AddDynamic(this, &AShooterPlayerController::OnBulletCountUpdated);
-		ShooterCharacter->OnDamaged.AddDynamic(this, &AShooterPlayerController::OnPawnDamaged);
+		ShooterCharacter->OnBulletCountUpdated.AddUniqueDynamic(this, &AShooterPlayerController::OnBulletCountUpdated);
+		ShooterCharacter->OnDamaged.AddUniqueDynamic(this, &AShooterPlayerController::OnPawnDamaged);
 
 		// force update the life bar
 		ShooterCharacter->OnDamaged.Broadcast(1.0f);
@@ -127,7 +181,18 @@ void AShooterPlayerController::OnPawnDestroyed(AActor* DestroyedActor)
 		BulletCounterUI->BP_UpdateBulletCounter(0, 0);
 	}
 
-	if (const AShooterGameMode* GameMode = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World || World->bIsTearingDown)
+	{
+		return;
+	}
+
+	if (const AShooterGameMode* GameMode = Cast<AShooterGameMode>(World->GetAuthGameMode()))
 	{
 		if (GameMode->IsMatchOver())
 		{
@@ -189,6 +254,11 @@ bool AShooterPlayerController::ShouldUseTouchControls() const
 
 void AShooterPlayerController::ShowTeamSelection()
 {
+	if (TeamSelectionWidget)
+	{
+		return;
+	}
+
 	TeamSelectionWidget = CreateWidget<UEduTeamSelectionWidget>(this, TeamSelectionWidgetClass);
 	if (!TeamSelectionWidget)
 	{
@@ -203,9 +273,50 @@ void AShooterPlayerController::ShowTeamSelection()
 	bShowMouseCursor = true;
 }
 
+void AShooterPlayerController::ShowMatchModeScreen(EEduMatchModeWidgetState DisplayState)
+{
+	if (MatchModeWidget)
+	{
+		MatchModeWidget->RemoveFromParent();
+		MatchModeWidget = nullptr;
+	}
+
+	MatchModeWidget = CreateWidget<UEduMatchModeWidget>(this, UEduMatchModeWidget::StaticClass());
+	if (!MatchModeWidget)
+	{
+		UE_LOG(LogTencent_Edu_FPS, Error, TEXT("Could not spawn match mode widget."));
+		return;
+	}
+
+	MatchModeWidget->SetDisplayState(DisplayState);
+	MatchModeWidget->AddToPlayerScreen(110);
+
+	FInputModeUIOnly InputMode;
+	SetInputMode(InputMode);
+	bShowMouseCursor = DisplayState == EEduMatchModeWidgetState::HostSelection;
+}
+
+void AShooterPlayerController::SelectMatchMode(EEduMatchMode MatchMode)
+{
+	if (!IsLocalPlayerController() || !HasAuthority())
+	{
+		return;
+	}
+
+	ServerSelectMatchMode_Implementation(MatchMode);
+}
+
+void AShooterPlayerController::ServerSelectMatchMode_Implementation(EEduMatchMode MatchMode)
+{
+	if (AShooterGameMode* GameMode = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		GameMode->SelectMatchMode(this, MatchMode);
+	}
+}
+
 bool AShooterPlayerController::SelectTeamSlot(EEduTeam Team, int32 SlotIndex)
 {
-	if (!IsLocalPlayerController() || UGameplayStatics::GetPlayerController(GetWorld(), 0) != this)
+	if (!IsLocalPlayerController())
 	{
 		return false;
 	}
@@ -218,23 +329,59 @@ bool AShooterPlayerController::SelectTeamSlot(EEduTeam Team, int32 SlotIndex)
 		return false;
 	}
 
-	if (AShooterGameMode* GameMode = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
+	if (HasAuthority())
 	{
-		if (!GameMode->ClaimPlayerSlot(this, RequestedSelection))
-		{
-			return false;
-		}
+		ServerSelectTeamSlot_Implementation(Team, SlotIndex);
 	}
 	else
 	{
-		return false;
+		ServerSelectTeamSlot(Team, SlotIndex);
 	}
 
-	TeamSlotSelection = RequestedSelection;
+	return true;
+}
+
+void AShooterPlayerController::ServerSelectTeamSlot_Implementation(EEduTeam Team, int32 SlotIndex)
+{
+	FEduTeamSlotSelection RequestedSelection;
+	RequestedSelection.Team = Team;
+	RequestedSelection.SlotIndex = SlotIndex;
+
+	bool bSuccess = false;
+	if (RequestedSelection.IsValid())
+	{
+		if (AShooterGameMode* GameMode = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
+		{
+			bSuccess = GameMode->ClaimPlayerSlot(this, RequestedSelection);
+		}
+	}
+
+	ClientTeamSlotSelectionResult(bSuccess, RequestedSelection);
+}
+
+void AShooterPlayerController::ClientTeamSlotSelectionResult_Implementation(
+	bool bSuccess,
+	FEduTeamSlotSelection Selection)
+{
+	if (bSuccess)
+	{
+		CompleteTeamSlotSelection(Selection);
+	}
+}
+
+void AShooterPlayerController::CompleteTeamSlotSelection(const FEduTeamSlotSelection& Selection)
+{
+	if (!Selection.IsValid())
+	{
+		return;
+	}
+
+	TeamSlotSelection = Selection;
 	bHasSelectedTeamSlot = true;
 
-	const TCHAR* TeamName = Team == EEduTeam::Red ? TEXT("Red") : TEXT("Blue");
-	UE_LOG(LogTencent_Edu_FPS, Log, TEXT("Local player selected team %s slot %d."), TeamName, SlotIndex);
+	const TCHAR* TeamName = Selection.Team == EEduTeam::Red ? TEXT("Red") : TEXT("Blue");
+	UE_LOG(LogTencent_Edu_FPS, Log, TEXT("Local player selected team %s slot %d."),
+		TeamName, Selection.SlotIndex);
 
 	if (TeamSelectionWidget)
 	{
@@ -242,11 +389,17 @@ bool AShooterPlayerController::SelectTeamSlot(EEduTeam Team, int32 SlotIndex)
 		TeamSelectionWidget = nullptr;
 	}
 
-	FInputModeGameOnly InputMode;
-	SetInputMode(InputMode);
-	bShowMouseCursor = false;
-
-	return true;
+	const AEduShooterGameState* ShooterGameState = GetWorld()->GetGameState<AEduShooterGameState>();
+	if (ShooterGameState && !ShooterGameState->HasMatchStarted())
+	{
+		ShowMatchModeScreen(EEduMatchModeWidgetState::WaitingForOtherPlayer);
+	}
+	else
+	{
+		FInputModeGameOnly InputMode;
+		SetInputMode(InputMode);
+		bShowMouseCursor = false;
+	}
 }
 
 void AShooterPlayerController::ShowMatchResult(EEduTeam WinningTeam)
@@ -276,4 +429,156 @@ void AShooterPlayerController::ShowMatchResult(EEduTeam WinningTeam)
 	FInputModeUIOnly InputMode;
 	SetInputMode(InputMode);
 	bShowMouseCursor = true;
+}
+
+void AShooterPlayerController::BindToShooterGameState()
+{
+	AEduShooterGameState* ShooterGameState = GetWorld()->GetGameState<AEduShooterGameState>();
+	if (!ShooterGameState)
+	{
+		UE_LOG(LogTencent_Edu_FPS, Error, TEXT("Shooter GameState is not configured for multiplayer."));
+		return;
+	}
+
+	ShooterGameState->OnTeamScoreChanged.AddUObject(this, &AShooterPlayerController::OnTeamScoreChanged);
+	ShooterGameState->OnMatchEnded.AddUObject(this, &AShooterPlayerController::OnReplicatedMatchEnded);
+	ShooterGameState->OnMatchSetupChanged.AddUObject(this, &AShooterPlayerController::OnMatchSetupChanged);
+
+	OnMatchSetupChanged(ShooterGameState->GetMatchMode(), ShooterGameState->HasMatchStarted());
+	OnTeamScoreChanged(
+		static_cast<uint8>(EEduTeam::Red),
+		ShooterGameState->GetTeamScore(EEduTeam::Red));
+	OnTeamScoreChanged(
+		static_cast<uint8>(EEduTeam::Blue),
+		ShooterGameState->GetTeamScore(EEduTeam::Blue));
+
+	if (ShooterGameState->IsMatchEnded())
+	{
+		OnReplicatedMatchEnded(ShooterGameState->GetWinningTeam());
+	}
+}
+
+void AShooterPlayerController::OnTeamScoreChanged(uint8 TeamByte, int32 Score)
+{
+	if (ShooterUI)
+	{
+		ShooterUI->BP_UpdateScore(TeamByte, Score);
+	}
+}
+
+void AShooterPlayerController::OnReplicatedMatchEnded(EEduTeam WinningTeam)
+{
+	ShowMatchResult(WinningTeam);
+}
+
+void AShooterPlayerController::OnMatchSetupChanged(EEduMatchMode MatchMode, bool bMatchStarted)
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (MatchMode == EEduMatchMode::Unselected)
+	{
+		ShowMatchModeScreen(HasAuthority()
+			? EEduMatchModeWidgetState::HostSelection
+			: EEduMatchModeWidgetState::WaitingForHost);
+		return;
+	}
+
+	if (MatchMode == EEduMatchMode::SinglePlayer && !HasAuthority())
+	{
+		if (TeamSelectionWidget)
+		{
+			TeamSelectionWidget->RemoveFromParent();
+			TeamSelectionWidget = nullptr;
+		}
+		ShowMatchModeScreen(EEduMatchModeWidgetState::SinglePlayerUnavailable);
+		return;
+	}
+
+	if (MatchModeWidget)
+	{
+		MatchModeWidget->RemoveFromParent();
+		MatchModeWidget = nullptr;
+	}
+
+	if (!bMatchStarted)
+	{
+		if (bHasSelectedTeamSlot)
+		{
+			ShowMatchModeScreen(EEduMatchModeWidgetState::WaitingForOtherPlayer);
+		}
+		else
+		{
+			ShowTeamSelection();
+		}
+		return;
+	}
+
+	if (TeamSelectionWidget)
+	{
+		TeamSelectionWidget->RemoveFromParent();
+		TeamSelectionWidget = nullptr;
+	}
+
+	FInputModeGameOnly InputMode;
+	SetInputMode(InputMode);
+	bShowMouseCursor = false;
+}
+
+void AShooterPlayerController::RequestRestartMatch()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	if (HasAuthority())
+	{
+		ServerRestartMatch_Implementation();
+	}
+	else
+	{
+		ServerRestartMatch();
+	}
+}
+
+void AShooterPlayerController::ServerRestartMatch_Implementation()
+{
+	if (AShooterGameMode* GameMode = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		GameMode->RestartNetworkMatch();
+	}
+}
+
+void AShooterPlayerController::SetPawnWaitingForMatch(bool bWaiting)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	AShooterCharacter* ShooterCharacter = Cast<AShooterCharacter>(GetPawn());
+	if (!ShooterCharacter)
+	{
+		return;
+	}
+
+	ShooterCharacter->SetActorHiddenInGame(bWaiting);
+	ShooterCharacter->SetActorEnableCollision(!bWaiting);
+
+	if (UCharacterMovementComponent* Movement = ShooterCharacter->GetCharacterMovement())
+	{
+		if (bWaiting)
+		{
+			Movement->DisableMovement();
+		}
+		else
+		{
+			Movement->SetMovementMode(MOVE_Walking);
+		}
+	}
+
+	ShooterCharacter->ForceNetUpdate();
 }

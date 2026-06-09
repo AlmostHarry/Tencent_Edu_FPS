@@ -33,6 +33,11 @@ void AShooterNPCSpawner::BeginPlay()
 {
 	Super::BeginPlay();
 	
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	// ensure we don't spawn NPCs if our initial spawn count is zero
 	if (SpawnCount > 0)
 	{

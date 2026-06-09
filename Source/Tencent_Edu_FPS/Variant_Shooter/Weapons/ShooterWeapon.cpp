@@ -11,10 +11,12 @@
 #include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Pawn.h"
+#include "Net/UnrealNetwork.h"
 
 AShooterWeapon::AShooterWeapon()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	bReplicates = true;
 
 	// create the root
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
@@ -40,18 +42,31 @@ void AShooterWeapon::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (!IsValid(GetOwner()))
+	{
+		return;
+	}
+
 	// subscribe to the owner's destroyed delegate
-	GetOwner()->OnDestroyed.AddDynamic(this, &AShooterWeapon::OnOwnerDestroyed);
+	GetOwner()->OnDestroyed.AddUniqueDynamic(this, &AShooterWeapon::OnOwnerDestroyed);
 
 	// cast the weapon owner
 	WeaponOwner = Cast<IShooterWeaponHolder>(GetOwner());
 	PawnOwner = Cast<APawn>(GetOwner());
 
-	// fill the first ammo clip
-	CurrentBullets = MagazineSize;
+	if (HasAuthority())
+	{
+		CurrentBullets = MagazineSize;
+	}
 
 	// attach the meshes to the owner
 	WeaponOwner->AttachWeaponMeshes(this);
+}
+
+void AShooterWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME_CONDITION(AShooterWeapon, CurrentBullets, COND_OwnerOnly);
 }
 
 void AShooterWeapon::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -91,6 +106,11 @@ void AShooterWeapon::DeactivateWeapon()
 
 void AShooterWeapon::StartFiring()
 {
+	if (!HasAuthority() || bIsFiring)
+	{
+		return;
+	}
+
 	// raise the firing flag
 	bIsFiring = true;
 
@@ -98,7 +118,7 @@ void AShooterWeapon::StartFiring()
 	// this may be under the refire rate if the weapon shoots slow enough and the player is spamming the trigger
 	const float TimeSinceLastShot = GetWorld()->GetTimeSeconds() - TimeOfLastShot;
 
-	if (TimeSinceLastShot > RefireRate)
+	if (TimeOfLastShot <= 0.0f || TimeSinceLastShot >= RefireRate)
 	{
 		// fire the weapon right away
 		Fire();
@@ -108,7 +128,8 @@ void AShooterWeapon::StartFiring()
 		// if we're full auto, schedule the next shot
 		if (bFullAuto)
 		{
-			GetWorld()->GetTimerManager().SetTimer(RefireTimer, this, &AShooterWeapon::Fire, TimeSinceLastShot, false);
+			const float RemainingCooldown = FMath::Max(RefireRate - TimeSinceLastShot, KINDA_SMALL_NUMBER);
+			GetWorld()->GetTimerManager().SetTimer(RefireTimer, this, &AShooterWeapon::Fire, RemainingCooldown, false);
 		}
 
 	}
@@ -125,6 +146,11 @@ void AShooterWeapon::StopFiring()
 
 void AShooterWeapon::Fire()
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	// ensure the player still wants to fire. They may have let go of the trigger
 	if (!bIsFiring)
 	{
@@ -155,12 +181,20 @@ void AShooterWeapon::Fire()
 
 void AShooterWeapon::FireCooldownExpired()
 {
+	// semi-auto fire is complete; allow a new trigger request
+	bIsFiring = false;
+
 	// notify the owner
 	WeaponOwner->OnSemiWeaponRefire();
 }
 
 void AShooterWeapon::FireProjectile(const FVector& TargetLocation)
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	// get the projectile transform
 	FTransform ProjectileTransform = CalculateProjectileSpawnTransform(TargetLocation);
 	
@@ -194,14 +228,21 @@ void AShooterWeapon::FireProjectile(const FVector& TargetLocation)
 
 FTransform AShooterWeapon::CalculateProjectileSpawnTransform(const FVector& TargetLocation) const
 {
+	const bool bUseFirstPersonMuzzle = PawnOwner && PawnOwner->IsLocallyControlled();
+	const USkeletalMeshComponent* MuzzleMesh = bUseFirstPersonMuzzle ? FirstPersonMesh : ThirdPersonMesh;
+
 	// find the muzzle location
-	const FVector MuzzleLoc = FirstPersonMesh->GetSocketLocation(MuzzleSocketName);
+	const FVector MuzzleLoc = MuzzleMesh->GetSocketLocation(MuzzleSocketName);
 
 	// calculate the spawn location ahead of the muzzle
-	const FVector SpawnLoc = MuzzleLoc + ((TargetLocation - MuzzleLoc).GetSafeNormal() * MuzzleOffset);
+	const FVector AimDirection = (TargetLocation - MuzzleLoc).GetSafeNormal();
+	const FVector SpawnLoc = MuzzleLoc + (AimDirection * MuzzleOffset);
 
-	// find the aim rotation vector while applying some variance to the target 
-	const FRotator AimRot = UKismetMathLibrary::FindLookAtRotation(SpawnLoc, TargetLocation + (UKismetMathLibrary::RandomUnitVector() * AimVariance));
+	// apply the configured angular spread around the requested aim direction
+	const FVector VariedAimDirection = AimVariance > 0.0f
+		? UKismetMathLibrary::RandomUnitVectorInConeInDegrees(AimDirection, AimVariance)
+		: AimDirection;
+	const FRotator AimRot = VariedAimDirection.Rotation();
 
 	// return the built transform
 	return FTransform(AimRot, SpawnLoc, FVector::OneVector);
@@ -215,4 +256,12 @@ const TSubclassOf<UAnimInstance>& AShooterWeapon::GetFirstPersonAnimInstanceClas
 const TSubclassOf<UAnimInstance>& AShooterWeapon::GetThirdPersonAnimInstanceClass() const
 {
 	return ThirdPersonAnimInstanceClass;
+}
+
+void AShooterWeapon::OnRep_CurrentBullets()
+{
+	if (WeaponOwner)
+	{
+		WeaponOwner->UpdateWeaponHUD(CurrentBullets, MagazineSize);
+	}
 }

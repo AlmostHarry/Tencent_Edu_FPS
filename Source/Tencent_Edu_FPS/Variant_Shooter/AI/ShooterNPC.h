@@ -24,7 +24,7 @@ class TENCENT_EDU_FPS_API AShooterNPC : public ATencent_Edu_FPSCharacter, public
 public:
 
 	/** Current HP for this character. It dies if it reaches zero through damage */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Damage")
+	UPROPERTY(ReplicatedUsing=OnRep_CurrentHP, EditAnywhere, BlueprintReadOnly, Category="Damage")
 	float CurrentHP = 100.0f;
 
 protected:
@@ -83,6 +83,7 @@ protected:
 	bool bIsShooting = false;
 
 	/** If true, this character has already died */
+	UPROPERTY(ReplicatedUsing=OnRep_IsDead)
 	bool bIsDead = false;
 
 	/** Deferred destruction on death timer */
@@ -100,6 +101,8 @@ protected:
 
 	/** Gameplay cleanup */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 public:
 
@@ -146,6 +149,14 @@ protected:
 
 	/** Called after death to destroy the actor */
 	void DeferredDestruction();
+
+	UFUNCTION()
+	void OnRep_CurrentHP();
+
+	UFUNCTION()
+	void OnRep_IsDead();
+
+	void HandleDeathVisuals();
 
 public:
 

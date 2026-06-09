@@ -8,22 +8,29 @@
 #include "GameFramework/PlayerStart.h"
 #include "ShooterCharacter.h"
 #include "ShooterPlayerController.h"
+#include "EduShooterGameState.h"
+#include "EduShooterPlayerState.h"
 #include "AI/ShooterNPC.h"
 #include "AI/ShooterNPCSpawner.h"
 #include "TimerManager.h"
+
+AShooterGameMode::AShooterGameMode()
+{
+	GameStateClass = AEduShooterGameState::StaticClass();
+	PlayerStateClass = AEduShooterPlayerState::StaticClass();
+}
 
 void AShooterGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (!GetGameState<AEduShooterGameState>())
+	{
+		UE_LOG(LogTemp, Error, TEXT("BP_ShooterGameMode must use EduShooterGameState for multiplayer."));
+	}
+
 	InitializeMatchSlots();
 
-	// create the UI
-	ShooterUI = CreateWidget<UShooterUI>(UGameplayStatics::GetPlayerController(GetWorld(), 0), ShooterUIClass);
-	if (ShooterUI)
-	{
-		ShooterUI->AddToViewport(0);
-	}
 }
 
 void AShooterGameMode::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -51,22 +58,14 @@ void AShooterGameMode::IncrementTeamScore(uint8 TeamByte)
 		return;
 	}
 
-	// retrieve the team score if any
-	int32 Score = 0;
-	if (int32* FoundScore = TeamScores.Find(TeamByte))
+	AEduShooterGameState* ShooterGameState = GetGameState<AEduShooterGameState>();
+	if (!ShooterGameState)
 	{
-		Score = *FoundScore;
+		return;
 	}
 
-	// increment the score for the given team
-	++Score;
-	TeamScores.Add(TeamByte, Score);
-
-	// update the UI
-	if (ShooterUI)
-	{
-		ShooterUI->BP_UpdateScore(TeamByte, Score);
-	}
+	const int32 Score = ShooterGameState->GetTeamScore(ScoringTeam) + 1;
+	ShooterGameState->SetTeamScore(ScoringTeam, Score);
 
 	if (Score >= WinningScore)
 	{
@@ -76,7 +75,8 @@ void AShooterGameMode::IncrementTeamScore(uint8 TeamByte)
 
 bool AShooterGameMode::ClaimPlayerSlot(AShooterPlayerController* PlayerController, const FEduTeamSlotSelection& Selection)
 {
-	if (!IsValid(PlayerController) || !Selection.IsValid())
+	if (!IsValid(PlayerController) || !Selection.IsValid() || bMatchPopulationStarted
+		|| !IsPlayerAllowedForCurrentMode(PlayerController))
 	{
 		return false;
 	}
@@ -88,21 +88,38 @@ bool AShooterGameMode::ClaimPlayerSlot(AShooterPlayerController* PlayerControlle
 	}
 
 	FEduManagedMatchSlot& TargetSlot = MatchSlots[TargetSlotIndex];
-	if (TargetSlot.HumanController.IsValid() || TargetSlot.AIPawn.IsValid())
+	if (TargetSlot.HumanController.IsValid())
 	{
 		return TargetSlot.HumanController.Get() == PlayerController;
 	}
 
 	const int32 PreviousSlotIndex = FindPlayerSlotIndex(PlayerController);
+	if (PreviousSlotIndex == TargetSlotIndex)
+	{
+		return true;
+	}
+
 	if (MatchSlots.IsValidIndex(PreviousSlotIndex))
 	{
 		MatchSlots[PreviousSlotIndex].HumanController.Reset();
 	}
 
+	GetWorld()->GetTimerManager().ClearTimer(TargetSlot.AIRespawnTimer);
+	if (AShooterNPC* ReplacedAI = TargetSlot.AIPawn.Get())
+	{
+		TargetSlot.AIPawn.Reset();
+		ReplacedAI->Destroy();
+	}
+
 	TargetSlot.HumanController = PlayerController;
+	if (AEduShooterPlayerState* ShooterPlayerState = PlayerController->GetPlayerState<AEduShooterPlayerState>())
+	{
+		ShooterPlayerState->SetTeamSlotSelection(Selection);
+	}
 
 	if (AShooterCharacter* Character = Cast<AShooterCharacter>(PlayerController->GetPawn()))
 	{
+		PlayerController->SetPawnWaitingForMatch(false);
 		Character->SetTeam(Selection.Team);
 
 		if (TargetSlot.PlayerStart.IsValid())
@@ -113,16 +130,53 @@ bool AShooterGameMode::ClaimPlayerSlot(AShooterPlayerController* PlayerControlle
 		}
 	}
 
-	FillUnoccupiedSlotsWithAI();
+	TryStartMatch();
+	return true;
+}
+
+bool AShooterGameMode::SelectMatchMode(AShooterPlayerController* PlayerController, EEduMatchMode MatchMode)
+{
+	if (!IsValid(PlayerController) || !PlayerController->IsLocalController()
+		|| (MatchMode != EEduMatchMode::SinglePlayer && MatchMode != EEduMatchMode::TwoPlayer))
+	{
+		return false;
+	}
+
+	AEduShooterGameState* ShooterGameState = GetGameState<AEduShooterGameState>();
+	if (!ShooterGameState || !ShooterGameState->SetMatchMode(MatchMode))
+	{
+		return false;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Listen server selected %s mode."),
+		MatchMode == EEduMatchMode::SinglePlayer ? TEXT("single-player") : TEXT("two-player"));
 	return true;
 }
 
 void AShooterGameMode::ReleasePlayerSlot(AShooterPlayerController* PlayerController)
 {
+	const UWorld* World = GetWorld();
+	if (bMatchShuttingDown || !World || World->bIsTearingDown)
+	{
+		return;
+	}
+
 	const int32 SlotIndex = FindPlayerSlotIndex(PlayerController);
 	if (MatchSlots.IsValidIndex(SlotIndex))
 	{
 		MatchSlots[SlotIndex].HumanController.Reset();
+		if (bMatchPopulationStarted)
+		{
+			FillUnoccupiedSlotsWithAI();
+		}
+	}
+
+	if (IsValid(PlayerController))
+	{
+		if (AEduShooterPlayerState* ShooterPlayerState = PlayerController->GetPlayerState<AEduShooterPlayerState>())
+		{
+			ShooterPlayerState->ClearTeamSlotSelection();
+		}
 	}
 }
 
@@ -137,6 +191,78 @@ bool AShooterGameMode::GetPlayerSpawnData(const AShooterPlayerController* Player
 	OutTransform = MatchSlots[SlotIndex].PlayerStart->GetActorTransform();
 	OutTeam = MatchSlots[SlotIndex].Selection.Team;
 	return true;
+}
+
+void AShooterGameMode::TryStartMatch()
+{
+	if (bMatchPopulationStarted)
+	{
+		return;
+	}
+
+	const int32 RequiredHumanPlayers = GetRequiredHumanPlayerCount();
+	if (RequiredHumanPlayers <= 0 || GetSelectedHumanPlayerCount() < RequiredHumanPlayers)
+	{
+		return;
+	}
+
+	bMatchPopulationStarted = true;
+	if (AEduShooterGameState* ShooterGameState = GetGameState<AEduShooterGameState>())
+	{
+		ShooterGameState->SetMatchStarted();
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("%d required human player(s) selected slots; starting match."),
+		RequiredHumanPlayers);
+	FillUnoccupiedSlotsWithAI();
+}
+
+int32 AShooterGameMode::GetRequiredHumanPlayerCount() const
+{
+	const AEduShooterGameState* ShooterGameState = GetGameState<AEduShooterGameState>();
+	if (!ShooterGameState)
+	{
+		return 0;
+	}
+
+	switch (ShooterGameState->GetMatchMode())
+	{
+	case EEduMatchMode::SinglePlayer:
+		return 1;
+	case EEduMatchMode::TwoPlayer:
+		return 2;
+	default:
+		return 0;
+	}
+}
+
+int32 AShooterGameMode::GetSelectedHumanPlayerCount() const
+{
+	int32 SelectedPlayerCount = 0;
+	for (const FEduManagedMatchSlot& Slot : MatchSlots)
+	{
+		if (Slot.HumanController.IsValid())
+		{
+			++SelectedPlayerCount;
+		}
+	}
+	return SelectedPlayerCount;
+}
+
+bool AShooterGameMode::IsPlayerAllowedForCurrentMode(const AShooterPlayerController* PlayerController) const
+{
+	const AEduShooterGameState* ShooterGameState = GetGameState<AEduShooterGameState>();
+	if (!ShooterGameState)
+	{
+		return false;
+	}
+
+	if (ShooterGameState->GetMatchMode() == EEduMatchMode::SinglePlayer)
+	{
+		return PlayerController && PlayerController->IsLocalController();
+	}
+
+	return ShooterGameState->GetMatchMode() == EEduMatchMode::TwoPlayer;
 }
 
 void AShooterGameMode::InitializeMatchSlots()
@@ -227,7 +353,9 @@ void AShooterGameMode::InitializeMatchSlots()
 
 void AShooterGameMode::FillUnoccupiedSlotsWithAI()
 {
-	if (bMatchEnded)
+	const UWorld* World = GetWorld();
+	if (bMatchShuttingDown || bMatchEnded || !bMatchPopulationStarted
+		|| !World || World->bIsTearingDown)
 	{
 		return;
 	}
@@ -244,7 +372,10 @@ void AShooterGameMode::FillUnoccupiedSlotsWithAI()
 
 void AShooterGameMode::SpawnAIForSlot(int32 SlotArrayIndex)
 {
-	if (bMatchEnded || !AICharacterClass || !MatchSlots.IsValidIndex(SlotArrayIndex))
+	const UWorld* World = GetWorld();
+	if (bMatchShuttingDown || bMatchEnded || !bMatchPopulationStarted
+		|| !World || World->bIsTearingDown || !AICharacterClass
+		|| !MatchSlots.IsValidIndex(SlotArrayIndex))
 	{
 		return;
 	}
@@ -292,11 +423,31 @@ void AShooterGameMode::FinishMatch(EEduTeam WinningTeam)
 	const TCHAR* TeamName = WinningTeam == EEduTeam::Red ? TEXT("Red") : TEXT("Blue");
 	UE_LOG(LogTemp, Log, TEXT("%s team won the match with %d points."), TeamName, WinningScore);
 
-	if (AShooterPlayerController* PlayerController =
-		Cast<AShooterPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0)))
+	if (AEduShooterGameState* ShooterGameState = GetGameState<AEduShooterGameState>())
 	{
-		PlayerController->ShowMatchResult(WinningTeam);
-		PlayerController->SetPause(true);
+		ShooterGameState->SetMatchEnded(WinningTeam);
+	}
+
+	TArray<AActor*> NPCActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AShooterNPC::StaticClass(), NPCActors);
+	for (AActor* Actor : NPCActors)
+	{
+		if (AShooterNPC* NPC = Cast<AShooterNPC>(Actor))
+		{
+			NPC->StopShooting();
+			if (AController* Controller = NPC->GetController())
+			{
+				Controller->StopMovement();
+			}
+		}
+	}
+}
+
+void AShooterGameMode::RestartNetworkMatch()
+{
+	if (bMatchEnded)
+	{
+		GetWorld()->ServerTravel(TEXT("?restart"), false);
 	}
 }
 
@@ -318,7 +469,8 @@ int32 AShooterGameMode::FindPlayerSlotIndex(const AShooterPlayerController* Play
 
 void AShooterGameMode::OnManagedAIDestroyed(AActor* DestroyedActor)
 {
-	if (bMatchShuttingDown || bMatchEnded)
+	const UWorld* World = GetWorld();
+	if (bMatchShuttingDown || bMatchEnded || !World || World->bIsTearingDown)
 	{
 		return;
 	}

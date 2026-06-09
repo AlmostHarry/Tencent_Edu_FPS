@@ -3,15 +3,20 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "EduShooterGameState.h"
 #include "EduTeamSlotTypes.h"
 #include "GameFramework/PlayerController.h"
 #include "ShooterPlayerController.generated.h"
 
 class UInputMappingContext;
 class AShooterCharacter;
+class AEduShooterGameState;
+class UShooterUI;
 class UShooterBulletCounterUI;
 class UEduMatchResultWidget;
+class UEduMatchModeWidget;
 class UEduTeamSelectionWidget;
+enum class EEduMatchModeWidgetState : uint8;
 
 /**
  *  Simple PlayerController for a first person shooter game
@@ -22,7 +27,10 @@ UCLASS(abstract, config="Game")
 class TENCENT_EDU_FPS_API AShooterPlayerController : public APlayerController
 {
 	GENERATED_BODY()
-	
+
+public:
+	AShooterPlayerController();
+
 protected:
 
 	/** Input mapping contexts for this player */
@@ -53,6 +61,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Shooter|UI")
 	TSubclassOf<UShooterBulletCounterUI> BulletCounterUIClass;
 
+	/** Type of team score UI widget to spawn */
+	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
+	TSubclassOf<UShooterUI> ShooterUIClass;
+
 	/** Type of match result UI widget to spawn */
 	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
 	TSubclassOf<UEduMatchResultWidget> MatchResultWidgetClass;
@@ -69,9 +81,17 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UShooterBulletCounterUI> BulletCounterUI;
 
+	/** Team score UI for this local player */
+	UPROPERTY()
+	TObjectPtr<UShooterUI> ShooterUI;
+
 	/** Team-slot selection UI for the first local player */
 	UPROPERTY()
 	TObjectPtr<UEduTeamSelectionWidget> TeamSelectionWidget;
+
+	/** Host mode selector or client waiting overlay */
+	UPROPERTY()
+	TObjectPtr<UEduMatchModeWidget> MatchModeWidget;
 
 	/** Simple match result overlay */
 	UPROPERTY()
@@ -92,6 +112,9 @@ protected:
 
 	/** Gameplay cleanup */
 	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
+
+	/** Rebind local HUD delegates after the replicated pawn changes */
+	virtual void OnRep_Pawn() override;
 
 	/** Initialize input bindings */
 	virtual void SetupInputComponent() override;
@@ -117,7 +140,36 @@ protected:
 	/** Shows the temporary team-slot selector */
 	void ShowTeamSelection();
 
+	/** Shows host mode controls or a client waiting message */
+	void ShowMatchModeScreen(EEduMatchModeWidgetState DisplayState);
+
+	/** Binds damage, ammo, and destruction events for a possessed pawn */
+	void InitializePossessedPawn(APawn* InPawn);
+
+	/** Binds local score and victory UI to replicated match state */
+	void BindToShooterGameState();
+
+	void OnTeamScoreChanged(uint8 TeamByte, int32 Score);
+	void OnReplicatedMatchEnded(EEduTeam WinningTeam);
+	void OnMatchSetupChanged(EEduMatchMode MatchMode, bool bMatchStarted);
+	void CompleteTeamSlotSelection(const FEduTeamSlotSelection& Selection);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSelectMatchMode(EEduMatchMode MatchMode);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSelectTeamSlot(EEduTeam Team, int32 SlotIndex);
+
+	UFUNCTION(Client, Reliable)
+	void ClientTeamSlotSelectionResult(bool bSuccess, FEduTeamSlotSelection Selection);
+
+	UFUNCTION(Server, Reliable)
+	void ServerRestartMatch();
+
 public:
+
+	/** Lets the listen server host choose single-player or two-player mode */
+	void SelectMatchMode(EEduMatchMode MatchMode);
 
 	/** Records a local player's team-slot choice */
 	UFUNCTION(BlueprintCallable, Category="Shooter|Team")
@@ -125,4 +177,11 @@ public:
 
 	/** Shows WIN or LOSE based on the local player's selected team */
 	void ShowMatchResult(EEduTeam WinningTeam);
+
+	/** Requests a server-authoritative restart after the match ends */
+	UFUNCTION(BlueprintCallable, Category="Shooter|Match")
+	void RequestRestartMatch();
+
+	/** Hides and immobilizes a pawn until it owns an active match slot */
+	void SetPawnWaitingForMatch(bool bWaiting);
 };

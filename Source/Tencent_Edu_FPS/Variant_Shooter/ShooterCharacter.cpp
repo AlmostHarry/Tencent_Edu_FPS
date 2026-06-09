@@ -12,6 +12,8 @@
 #include "Camera/CameraComponent.h"
 #include "TimerManager.h"
 #include "ShooterGameMode.h"
+#include "EduShooterGameState.h"
+#include "Net/UnrealNetwork.h"
 
 AShooterCharacter::AShooterCharacter()
 {
@@ -26,11 +28,22 @@ void AShooterCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// reset HP to max
-	CurrentHP = MaxHP;
+	if (HasAuthority())
+	{
+		CurrentHP = MaxHP;
+		bIsDead = false;
+	}
 
 	// update the HUD
 	OnDamaged.Broadcast(1.0f);
+}
+
+void AShooterCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AShooterCharacter, CurrentHP);
+	DOREPLIFETIME(AShooterCharacter, CurrentWeapon);
+	DOREPLIFETIME(AShooterCharacter, bIsDead);
 }
 
 void AShooterCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -61,6 +74,11 @@ void AShooterCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 float AShooterCharacter::TakeDamage(float Damage, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
+	if (!HasAuthority())
+	{
+		return 0.0f;
+	}
+
 	// ignore if already dead
 	if (CurrentHP <= 0.0f)
 	{
@@ -93,16 +111,29 @@ float AShooterCharacter::TakeDamage(float Damage, struct FDamageEvent const& Dam
 void AShooterCharacter::DoAim(float Yaw, float Pitch)
 {
 	// only route inputs if the character is not dead
-	if (!IsDead())
+	if (CanProcessGameplayInput())
 	{
 		Super::DoAim(Yaw, Pitch);
+
+		if (bLocallyWantsToFire && IsLocallyControlled())
+		{
+			const FVector AimTarget = CalculateLocalWeaponTargetLocation();
+			if (HasAuthority())
+			{
+				SetServerWeaponTargetLocation(AimTarget);
+			}
+			else
+			{
+				ServerUpdateAimTarget(AimTarget);
+			}
+		}
 	}
 }
 
 void AShooterCharacter::DoMove(float Right, float Forward)
 {
 	// only route inputs if the character is not dead
-	if (!IsDead())
+	if (CanProcessGameplayInput())
 	{
 		Super::DoMove(Right, Forward);
 	}
@@ -111,7 +142,7 @@ void AShooterCharacter::DoMove(float Right, float Forward)
 void AShooterCharacter::DoJumpStart()
 {
 	// only route inputs if the character is not dead
-	if (!IsDead())
+	if (CanProcessGameplayInput())
 	{
 		Super::DoJumpStart();
 	}
@@ -120,7 +151,7 @@ void AShooterCharacter::DoJumpStart()
 void AShooterCharacter::DoJumpEnd()
 {
 	// only route inputs if the character is not dead
-	if (!IsDead())
+	if (CanProcessGameplayInput())
 	{
 		Super::DoJumpEnd();
 	}
@@ -128,26 +159,82 @@ void AShooterCharacter::DoJumpEnd()
 
 void AShooterCharacter::DoStartFiring()
 {
-	// fire the current weapon
-	if (CurrentWeapon && !IsDead())
+	if (!CanProcessGameplayInput())
 	{
-		CurrentWeapon->StartFiring();
+		return;
+	}
+
+	bLocallyWantsToFire = true;
+	const FVector AimTarget = CalculateLocalWeaponTargetLocation();
+
+	if (HasAuthority())
+	{
+		ServerStartFiring_Implementation(AimTarget);
+	}
+	else
+	{
+		ServerStartFiring(AimTarget);
 	}
 }
 
 void AShooterCharacter::DoStopFiring()
 {
-	// stop firing the current weapon
-	if (CurrentWeapon && !IsDead())
+	bLocallyWantsToFire = false;
+
+	if (HasAuthority())
 	{
-		CurrentWeapon->StopFiring();
+		ServerStopFiring_Implementation();
+	}
+	else
+	{
+		ServerStopFiring();
 	}
 }
 
 void AShooterCharacter::DoSwitchWeapon()
 {
+	if (!CanProcessGameplayInput())
+	{
+		return;
+	}
+
+	if (HasAuthority())
+	{
+		ServerSwitchWeapon_Implementation();
+	}
+	else
+	{
+		ServerSwitchWeapon();
+	}
+}
+
+void AShooterCharacter::ServerStartFiring_Implementation(FVector_NetQuantize AimTarget)
+{
+	SetServerWeaponTargetLocation(AimTarget);
+
+	if (CurrentWeapon && CanProcessGameplayInput())
+	{
+		CurrentWeapon->StartFiring();
+	}
+}
+
+void AShooterCharacter::ServerStopFiring_Implementation()
+{
+	if (CurrentWeapon)
+	{
+		CurrentWeapon->StopFiring();
+	}
+}
+
+void AShooterCharacter::ServerUpdateAimTarget_Implementation(FVector_NetQuantize AimTarget)
+{
+	SetServerWeaponTargetLocation(AimTarget);
+}
+
+void AShooterCharacter::ServerSwitchWeapon_Implementation()
+{
 	// ensure we have at least two weapons two switch between
-	if (OwnedWeapons.Num() > 1 && !IsDead())
+	if (OwnedWeapons.Num() > 1 && CanProcessGameplayInput())
 	{
 		// deactivate the old weapon
 		CurrentWeapon->DeactivateWeapon();
@@ -171,6 +258,7 @@ void AShooterCharacter::DoSwitchWeapon()
 
 		// activate the new weapon
 		CurrentWeapon->ActivateWeapon();
+		ForceNetUpdate();
 	}
 }
 
@@ -183,7 +271,7 @@ void AShooterCharacter::AttachWeaponMeshes(AShooterWeapon* Weapon)
 
 	// attach the weapon meshes
 	Weapon->GetFirstPersonMesh()->AttachToComponent(GetFirstPersonMesh(), AttachmentRule, FirstPersonWeaponSocket);
-	Weapon->GetThirdPersonMesh()->AttachToComponent(GetMesh(), AttachmentRule, FirstPersonWeaponSocket);
+	Weapon->GetThirdPersonMesh()->AttachToComponent(GetMesh(), AttachmentRule, ThirdPersonWeaponSocket);
 	
 }
 
@@ -205,6 +293,16 @@ void AShooterCharacter::UpdateWeaponHUD(int32 CurrentAmmo, int32 MagazineSize)
 
 FVector AShooterCharacter::GetWeaponTargetLocation()
 {
+	if (HasAuthority() && !IsLocallyControlled() && bHasServerWeaponTarget)
+	{
+		return ServerWeaponTargetLocation;
+	}
+
+	return CalculateLocalWeaponTargetLocation();
+}
+
+FVector AShooterCharacter::CalculateLocalWeaponTargetLocation() const
+{
 	// trace ahead from the camera viewpoint
 	FHitResult OutHit;
 
@@ -220,8 +318,28 @@ FVector AShooterCharacter::GetWeaponTargetLocation()
 	return OutHit.bBlockingHit ? OutHit.ImpactPoint : OutHit.TraceEnd;
 }
 
+void AShooterCharacter::SetServerWeaponTargetLocation(const FVector& AimTarget)
+{
+	const FVector AimOrigin = GetPawnViewLocation();
+	FVector AimOffset = AimTarget - AimOrigin;
+
+	if (AimTarget.ContainsNaN() || AimOffset.IsNearlyZero())
+	{
+		const FRotator ViewRotation = Controller ? Controller->GetControlRotation() : GetActorRotation();
+		AimOffset = ViewRotation.Vector() * MaxAimDistance;
+	}
+
+	ServerWeaponTargetLocation = AimOrigin + AimOffset.GetClampedToMaxSize(MaxAimDistance);
+	bHasServerWeaponTarget = true;
+}
+
 void AShooterCharacter::AddWeaponClass(const TSubclassOf<AShooterWeapon>& WeaponClass)
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	// do we already own this weapon?
 	AShooterWeapon* OwnedWeapon = FindWeaponOfType(WeaponClass);
 
@@ -250,6 +368,7 @@ void AShooterCharacter::AddWeaponClass(const TSubclassOf<AShooterWeapon>& Weapon
 			// switch to the new weapon
 			CurrentWeapon = AddedWeapon;
 			CurrentWeapon->ActivateWeapon();
+			ForceNetUpdate();
 		}
 	}
 }
@@ -260,8 +379,12 @@ void AShooterCharacter::OnWeaponActivated(AShooterWeapon* Weapon)
 	OnBulletCountUpdated.Broadcast(Weapon->GetMagazineSize(), Weapon->GetBulletCount());
 
 	// set the character mesh AnimInstances
-	GetFirstPersonMesh()->SetAnimInstanceClass(Weapon->GetFirstPersonAnimInstanceClass());
+	if (IsLocallyControlled())
+	{
+		GetFirstPersonMesh()->SetAnimInstanceClass(Weapon->GetFirstPersonAnimInstanceClass());
+	}
 	GetMesh()->SetAnimInstanceClass(Weapon->GetThirdPersonAnimInstanceClass());
+	RefreshFirstPersonPresentation();
 }
 
 void AShooterCharacter::OnWeaponDeactivated(AShooterWeapon* Weapon)
@@ -292,11 +415,15 @@ AShooterWeapon* AShooterCharacter::FindWeaponOfType(TSubclassOf<AShooterWeapon> 
 
 void AShooterCharacter::Die(AController* KillerController)
 {
-	// deactivate the weapon
-	if (IsValid(CurrentWeapon))
+	if (!HasAuthority() || bIsDead)
 	{
-		CurrentWeapon->DeactivateWeapon();
+		return;
 	}
+
+	bIsDead = true;
+	CurrentHP = 0.0f;
+
+	HandleDeathVisuals();
 
 	// increment the killer's team score
 	if (AShooterGameMode* GM = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
@@ -307,33 +434,66 @@ void AShooterCharacter::Die(AController* KillerController)
 		}
 	}
 
-	// grant the death tag to the character
-	Tags.Add(DeathTag);
-		
-	// stop character movement
-	GetCharacterMovement()->StopMovementImmediately();
-
-	// disable controls
-	DisableInput(nullptr);
-
-	// reset the bullet counter UI
-	OnBulletCountUpdated.Broadcast(0, 0);
-
-	// call the BP handler
-	BP_OnDeath();
-
 	// schedule character respawn
 	GetWorld()->GetTimerManager().SetTimer(RespawnTimer, this, &AShooterCharacter::OnRespawn, RespawnTime, false);
+	ForceNetUpdate();
 }
 
 void AShooterCharacter::OnRespawn()
 {
-	// destroy the character to force the PC to respawn
-	Destroy();
+	if (HasAuthority())
+	{
+		Destroy();
+	}
 }
 
 bool AShooterCharacter::IsDead() const
 {
-	// the character is dead if their current HP drops to zero
-	return CurrentHP <= 0.0f;
+	return bIsDead;
+}
+
+void AShooterCharacter::OnRep_CurrentHP()
+{
+	OnDamaged.Broadcast(FMath::Max(0.0f, CurrentHP / MaxHP));
+}
+
+void AShooterCharacter::OnRep_CurrentWeapon()
+{
+	if (CurrentWeapon)
+	{
+		OnWeaponActivated(CurrentWeapon);
+	}
+}
+
+void AShooterCharacter::OnRep_IsDead()
+{
+	if (bIsDead)
+	{
+		HandleDeathVisuals();
+	}
+}
+
+void AShooterCharacter::HandleDeathVisuals()
+{
+	if (IsValid(CurrentWeapon))
+	{
+		CurrentWeapon->DeactivateWeapon();
+	}
+
+	Tags.AddUnique(DeathTag);
+	GetCharacterMovement()->StopMovementImmediately();
+	DisableInput(nullptr);
+	OnBulletCountUpdated.Broadcast(0, 0);
+	BP_OnDeath();
+}
+
+bool AShooterCharacter::CanProcessGameplayInput() const
+{
+	if (bIsDead)
+	{
+		return false;
+	}
+
+	const AEduShooterGameState* ShooterGameState = GetWorld()->GetGameState<AEduShooterGameState>();
+	return !ShooterGameState || (ShooterGameState->HasMatchStarted() && !ShooterGameState->IsMatchEnded());
 }
