@@ -62,8 +62,8 @@ protected:
 	UPROPERTY(EditAnywhere, Category="Animation")
 	TSubclassOf<UAnimInstance> ThirdPersonAnimInstanceClass;
 
-	/** Cone half-angle for variance while aiming */
-	UPROPERTY(EditAnywhere, Category="Aim", meta = (ClampMin = 0, ClampMax = 90, Units = "Degrees"))
+	/** Maximum shot variance radius around the aim target */
+	UPROPERTY(EditAnywhere, Category="Aim", meta = (ClampMin = 0, ClampMax = 1000, Units = "cm"))
 	float AimVariance = 0.0f;
 
 	/** Amount of firing recoil to apply to the owner */
@@ -87,7 +87,7 @@ protected:
 	float RefireRate = 0.5f;
 
 	/** Game time of last shot fired, used to enforce refire rate on semi auto */
-	float TimeOfLastShot = 0.0f;
+	float TimeOfLastShot = -1.0f;
 
 	/** If true, the weapon is currently firing */
 	bool bIsFiring = false;
@@ -148,6 +148,9 @@ public:
 	/** Stop firing this weapon */
 	void StopFiring();
 
+	/** Fires one server-authoritative shot if the refire cooldown has elapsed */
+	bool TryFireOnce();
+
 protected:
 
 	/** Fire the weapon */
@@ -183,4 +186,10 @@ public:
 
 	/** Returns the current bullet count */
 	int32 GetBulletCount() const { return CurrentBullets; }
+
+	/** Returns whether holding fire should request repeated shots */
+	bool IsFullAuto() const { return bFullAuto; }
+
+	/** Returns the minimum interval between shots */
+	float GetRefireRate() const { return RefireRate; }
 };

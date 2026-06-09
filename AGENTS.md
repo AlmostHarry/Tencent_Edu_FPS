@@ -46,19 +46,44 @@ Team identity is stored with `EEduTeam` on the shared character base:
 
 An initial server-authoritative multiplayer pass is now implemented:
 
+- The project uses UE state replication with a listen server, not deterministic frame synchronization.
 - Human slot selection is requested through a server RPC and validated by `ShooterGameMode`.
 - Human players can replace AI occupants in managed match slots.
+- Only the listen-server host selects single-player or two-player mode.
+- A two-player match does not start until both human players have selected valid slots.
+- Pawns waiting for match setup are hidden, non-colliding, and unable to process gameplay input.
 - Team and character state replicate from the server.
-- Player firing requests run on the server; weapons, ammo, projectiles, damage, and deaths use server authority.
+- Human players request individual shots from their locally controlled pawn.
+- The server validates each shot against the weapon `RefireRate` and is the only machine that
+  spawns projectiles, consumes ammo, applies damage, and processes death.
+- Full-auto timing for human players is driven locally, but every shot still requires server approval.
+- AI weapons continue to use server-side hold-to-fire timers.
 - AI spawning and decisions remain server-only while NPC movement and death state replicate.
 - Team scores and the winning team replicate through `EduShooterGameState`.
 - Human team-slot identity replicates through `EduShooterPlayerState`.
 - Each local player owns their HUD, team selector, and match result UI.
 - Match restart is requested from a client and performed by server travel.
 
+Important weapon networking constraints:
+
+- Do not restore a player `StartFiring` / `StopFiring` RPC pair that leaves a server-side full-auto
+  timer active until the stop RPC arrives. Network delay can produce an unintended extra shot.
+- Do not spawn a second predicted gameplay projectile on the owning client. The authoritative
+  replicated server projectile is the gameplay projectile.
+- Preserve the original Shooter template meaning of `AimVariance`: existing weapon asset values are
+  target-space distance offsets, not angular cone values. Do not reinterpret values such as `15`,
+  `20`, or `30` as degrees.
+- Do not change weapon Blueprint values to hide a replication or input-timing bug. Fix the ownership,
+  RPC, or validation path first.
+- Controller, camera, first-person mesh, recoil presentation, and local HUD operations must be guarded by local
+  ownership or a valid controller. Replicated remote pawns do not own a local controller.
+
 This is an initial networking implementation, not final multiplayer verification. It still requires a
 two-player Listen Server PIE test covering slot contention, shooting from both clients, damage, death,
 respawn, score, victory, and restart under simulated latency.
+
+The current architecture, encountered problems, and regression checklist are documented in
+`Docs/Multiplayer_Networking.md`.
 
 Important implementation files:
 
@@ -68,6 +93,10 @@ Important implementation files:
 - `Source/Tencent_Edu_FPS/Variant_Shooter/UI/EduTeamSelectionWidget.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterGameMode.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterPlayerController.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterCharacter.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/Weapons/ShooterWeapon.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/Weapons/ShooterProjectile.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/Weapons/ShooterPickup.*`
 - `Source/Tencent_Edu_FPS/Tencent_Edu_FPSCharacter.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/AI/ShooterAIController.*`
 
@@ -151,8 +180,15 @@ Before considering the project ready:
 - The editor opens the `.uproject` without missing required content.
 - A default map can be played.
 - Two PIE players can join the same session.
+- Only the listen-server host can select the match mode.
+- A two-player match waits until both players select different valid slots.
 - Enemies are visible to all players.
+- One trigger press produces no duplicate authoritative projectile.
+- Rapid taps and held full-auto fire respect the original weapon `RefireRate`.
+- Server and client shots travel toward the crosshair with only the template's configured target-space variance.
+- Picking up and switching weapons produces no controller-null Blueprint runtime errors.
 - Enemy damage and death are synchronized.
 - Score is synchronized.
 - Victory state is synchronized.
+- Respawn and match restart remain synchronized.
 - The repo does not include generated UE folders or packaged build output.

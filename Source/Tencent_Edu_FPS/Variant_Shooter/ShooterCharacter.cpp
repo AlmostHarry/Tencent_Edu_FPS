@@ -52,6 +52,7 @@ void AShooterCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 
 	// clear the respawn timer
 	GetWorld()->GetTimerManager().ClearTimer(RespawnTimer);
+	GetWorld()->GetTimerManager().ClearTimer(LocalRefireTimer);
 }
 
 void AShooterCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -159,36 +160,31 @@ void AShooterCharacter::DoJumpEnd()
 
 void AShooterCharacter::DoStartFiring()
 {
-	if (!CanProcessGameplayInput())
+	if (!CanProcessGameplayInput() || bLocallyWantsToFire)
 	{
 		return;
 	}
 
 	bLocallyWantsToFire = true;
-	const FVector AimTarget = CalculateLocalWeaponTargetLocation();
+	RequestFireShot();
 
-	if (HasAuthority())
+	if (CurrentWeapon && CurrentWeapon->IsFullAuto())
 	{
-		ServerStartFiring_Implementation(AimTarget);
-	}
-	else
-	{
-		ServerStartFiring(AimTarget);
+		const float RefireRate = FMath::Max(CurrentWeapon->GetRefireRate(), KINDA_SMALL_NUMBER);
+		GetWorld()->GetTimerManager().SetTimer(
+			LocalRefireTimer,
+			this,
+			&AShooterCharacter::RequestFireShot,
+			RefireRate,
+			true,
+			RefireRate);
 	}
 }
 
 void AShooterCharacter::DoStopFiring()
 {
 	bLocallyWantsToFire = false;
-
-	if (HasAuthority())
-	{
-		ServerStopFiring_Implementation();
-	}
-	else
-	{
-		ServerStopFiring();
-	}
+	GetWorld()->GetTimerManager().ClearTimer(LocalRefireTimer);
 }
 
 void AShooterCharacter::DoSwitchWeapon()
@@ -208,21 +204,32 @@ void AShooterCharacter::DoSwitchWeapon()
 	}
 }
 
-void AShooterCharacter::ServerStartFiring_Implementation(FVector_NetQuantize AimTarget)
+void AShooterCharacter::RequestFireShot()
+{
+	if (!bLocallyWantsToFire || !CurrentWeapon || !CanProcessGameplayInput())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(LocalRefireTimer);
+		return;
+	}
+
+	const FVector AimTarget = CalculateLocalWeaponTargetLocation();
+	if (HasAuthority())
+	{
+		ServerFireShot_Implementation(AimTarget);
+	}
+	else
+	{
+		ServerFireShot(AimTarget);
+	}
+}
+
+void AShooterCharacter::ServerFireShot_Implementation(FVector_NetQuantize AimTarget)
 {
 	SetServerWeaponTargetLocation(AimTarget);
 
 	if (CurrentWeapon && CanProcessGameplayInput())
 	{
-		CurrentWeapon->StartFiring();
-	}
-}
-
-void AShooterCharacter::ServerStopFiring_Implementation()
-{
-	if (CurrentWeapon)
-	{
-		CurrentWeapon->StopFiring();
+		CurrentWeapon->TryFireOnce();
 	}
 }
 

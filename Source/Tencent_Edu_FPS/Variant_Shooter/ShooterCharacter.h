@@ -87,6 +87,7 @@ protected:
 
 	bool bHasServerWeaponTarget = false;
 	bool bLocallyWantsToFire = false;
+	FTimerHandle LocalRefireTimer;
 
 public:
 
@@ -147,10 +148,7 @@ public:
 
 protected:
 	UFUNCTION(Server, Reliable)
-	void ServerStartFiring(FVector_NetQuantize AimTarget);
-
-	UFUNCTION(Server, Reliable)
-	void ServerStopFiring();
+	void ServerFireShot(FVector_NetQuantize AimTarget);
 
 	UFUNCTION(Server, Unreliable)
 	void ServerUpdateAimTarget(FVector_NetQuantize AimTarget);
@@ -217,6 +215,7 @@ protected:
 
 	void HandleDeathVisuals();
 	bool CanProcessGameplayInput() const;
+	void RequestFireShot();
 	FVector CalculateLocalWeaponTargetLocation() const;
 	void SetServerWeaponTargetLocation(const FVector& AimTarget);
 

@@ -2,7 +2,6 @@
 
 
 #include "ShooterWeapon.h"
-#include "Kismet/KismetMathLibrary.h"
 #include "Engine/World.h"
 #include "ShooterProjectile.h"
 #include "ShooterWeaponHolder.h"
@@ -118,7 +117,7 @@ void AShooterWeapon::StartFiring()
 	// this may be under the refire rate if the weapon shoots slow enough and the player is spamming the trigger
 	const float TimeSinceLastShot = GetWorld()->GetTimeSeconds() - TimeOfLastShot;
 
-	if (TimeOfLastShot <= 0.0f || TimeSinceLastShot >= RefireRate)
+	if (TimeOfLastShot < 0.0f || TimeSinceLastShot >= RefireRate)
 	{
 		// fire the weapon right away
 		Fire();
@@ -157,14 +156,10 @@ void AShooterWeapon::Fire()
 		return;
 	}
 	
-	// fire a projectile at the target
-	FireProjectile(WeaponOwner->GetWeaponTargetLocation());
-
-	// update the time of our last shot
-	TimeOfLastShot = GetWorld()->GetTimeSeconds();
-
-	// make noise so the AI perception system can hear us
-	MakeNoise(ShotLoudness, PawnOwner, PawnOwner->GetActorLocation(), ShotNoiseRange, ShotNoiseTag);
+	if (!TryFireOnce())
+	{
+		return;
+	}
 
 	// are we full auto?
 	if (bFullAuto)
@@ -177,6 +172,27 @@ void AShooterWeapon::Fire()
 		GetWorld()->GetTimerManager().SetTimer(RefireTimer, this, &AShooterWeapon::FireCooldownExpired, RefireRate, false);
 
 	}
+}
+
+bool AShooterWeapon::TryFireOnce()
+{
+	if (!HasAuthority())
+	{
+		return false;
+	}
+
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+	const float TimeSinceLastShot = CurrentTime - TimeOfLastShot;
+	constexpr float RefireTolerance = 0.005f;
+	if (TimeOfLastShot >= 0.0f && TimeSinceLastShot + RefireTolerance < RefireRate)
+	{
+		return false;
+	}
+
+	FireProjectile(WeaponOwner->GetWeaponTargetLocation());
+	TimeOfLastShot = CurrentTime;
+	MakeNoise(ShotLoudness, PawnOwner, PawnOwner->GetActorLocation(), ShotNoiseRange, ShotNoiseTag);
+	return true;
 }
 
 void AShooterWeapon::FireCooldownExpired()
@@ -238,10 +254,10 @@ FTransform AShooterWeapon::CalculateProjectileSpawnTransform(const FVector& Targ
 	const FVector AimDirection = (TargetLocation - MuzzleLoc).GetSafeNormal();
 	const FVector SpawnLoc = MuzzleLoc + (AimDirection * MuzzleOffset);
 
-	// apply the configured angular spread around the requested aim direction
-	const FVector VariedAimDirection = AimVariance > 0.0f
-		? UKismetMathLibrary::RandomUnitVectorInConeInDegrees(AimDirection, AimVariance)
-		: AimDirection;
+	// Preserve the template's target-space variance semantics. AimVariance is a
+	// distance around the target, not an angular cone half-angle.
+	const FVector VariedTargetLocation = TargetLocation + (FMath::VRand() * AimVariance);
+	const FVector VariedAimDirection = (VariedTargetLocation - SpawnLoc).GetSafeNormal();
 	const FRotator AimRot = VariedAimDirection.Rotation();
 
 	// return the built transform
