@@ -4,7 +4,9 @@
 
 This is a UE5 first-person shooter course project for Tencent Game "Kai Ju Yi Ke", client direction.
 
-The current goal is to build a small but complete MVP first, then polish only after the demo can already be submitted.
+The MVP is complete and has passed the required single-player and two-player Listen Server PIE
+acceptance checks. Further work should focus on submission preparation and targeted polish without
+expanding the gameplay scope unnecessarily.
 
 ## MVP Scope
 
@@ -78,9 +80,10 @@ Important weapon networking constraints:
 - Controller, camera, first-person mesh, recoil presentation, and local HUD operations must be guarded by local
   ownership or a valid controller. Replicated remote pawns do not own a local controller.
 
-This is an initial networking implementation, not final multiplayer verification. It still requires a
-two-player Listen Server PIE test covering slot contention, shooting from both clients, damage, death,
-respawn, score, victory, and restart under simulated latency.
+The multiplayer MVP has completed a two-player Listen Server PIE acceptance pass. Shooting from both
+players, damage, death, respawn, score, victory, and match restart were verified as working correctly.
+Testing under simulated latency or packet loss remains useful optional network hardening, but it is
+not required for the current course MVP.
 
 The current architecture, encountered problems, and regression checklist are documented in
 `Docs/Multiplayer_Networking.md`.
@@ -163,17 +166,25 @@ If any required `.uasset` or `.umap` file is larger than GitHub's normal file li
 
 ## Development Priorities
 
+Completed MVP milestones:
+
 1. Build the MVP loop.
 2. Verify it in single-player.
 3. Verify it in PIE multiplayer with 2 players.
-4. Fix replication issues.
-5. Add UI clarity and simple feedback.
-6. Record demo video.
-7. Write the PDF with implementation notes and GitHub link.
+4. Fix blocking replication issues found during acceptance testing.
+
+Current priorities:
+
+1. Add only necessary UI clarity and simple feedback.
+2. Record the demo video.
+3. Write the PDF with implementation notes and GitHub link.
 
 Avoid large refactors, marketplace asset churn, complex menus, matchmaking, advanced weapon systems, and dedicated server deployment unless the MVP is already stable.
 
 ## Verification Checklist
+
+The core MVP acceptance pass is complete. The following checklist should still be used for regression
+testing after gameplay or networking changes:
 
 Before considering the project ready:
 
