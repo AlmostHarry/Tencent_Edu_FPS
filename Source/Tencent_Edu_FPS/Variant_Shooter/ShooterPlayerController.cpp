@@ -17,6 +17,7 @@
 #include "ShooterUI.h"
 #include "EduMatchResultWidget.h"
 #include "EduMatchModeWidget.h"
+#include "EduRespawnCountdownWidget.h"
 #include "EduTeamSelectionWidget.h"
 #include "Tencent_Edu_FPS.h"
 #include "Widgets/Input/SVirtualJoystick.h"
@@ -35,6 +36,13 @@ AShooterPlayerController::AShooterPlayerController()
 	if (MatchModeWidgetFinder.Succeeded())
 	{
 		MatchModeWidgetClass = MatchModeWidgetFinder.Class;
+	}
+
+	static ConstructorHelpers::FClassFinder<UEduRespawnCountdownWidget> RespawnWidgetFinder(
+		TEXT("/Game/Variant_Shooter/UI/WBP_RespawnCountdown"));
+	if (RespawnWidgetFinder.Succeeded())
+	{
+		RespawnCountdownWidgetClass = RespawnWidgetFinder.Class;
 	}
 }
 
@@ -89,6 +97,7 @@ void AShooterPlayerController::BeginPlay()
 void AShooterPlayerController::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
 	UWorld* World = GetWorld();
+	HideRespawnCountdown();
 	if (World)
 	{
 		if (AEduShooterGameState* ShooterGameState = World->GetGameState<AEduShooterGameState>())
@@ -162,6 +171,11 @@ void AShooterPlayerController::InitializePossessedPawn(APawn* InPawn)
 		return;
 	}
 
+	if (IsLocalPlayerController())
+	{
+		HideRespawnCountdown();
+	}
+
 	// subscribe to the pawn's OnDestroyed delegate
 	InPawn->OnDestroyed.AddUniqueDynamic(this, &AShooterPlayerController::OnPawnDestroyed);
 
@@ -174,9 +188,15 @@ void AShooterPlayerController::InitializePossessedPawn(APawn* InPawn)
 		// subscribe to the pawn's delegates
 		ShooterCharacter->OnBulletCountUpdated.AddUniqueDynamic(this, &AShooterPlayerController::OnBulletCountUpdated);
 		ShooterCharacter->OnDamaged.AddUniqueDynamic(this, &AShooterPlayerController::OnPawnDamaged);
+		ShooterCharacter->OnDeathStarted.AddUniqueDynamic(this, &AShooterPlayerController::OnPawnDeathStarted);
 
 		// force update the life bar
 		ShooterCharacter->OnDamaged.Broadcast(1.0f);
+
+		if (ShooterCharacter->IsDead())
+		{
+			OnPawnDeathStarted(ShooterCharacter->GetRespawnEndServerTime());
+		}
 	}
 }
 
@@ -321,6 +341,78 @@ void AShooterPlayerController::ServerSelectMatchMode_Implementation(EEduMatchMod
 	}
 }
 
+void AShooterPlayerController::OnPawnDeathStarted(float InRespawnEndServerTime)
+{
+	if (!IsLocalPlayerController() || InRespawnEndServerTime <= 0.0f)
+	{
+		return;
+	}
+
+	const AEduShooterGameState* ShooterGameState = GetWorld()->GetGameState<AEduShooterGameState>();
+	if (ShooterGameState && ShooterGameState->IsMatchEnded())
+	{
+		return;
+	}
+
+	RespawnEndServerTime = InRespawnEndServerTime;
+	if (!RespawnCountdownWidget)
+	{
+		RespawnCountdownWidget = CreateWidget<UEduRespawnCountdownWidget>(
+			this,
+			RespawnCountdownWidgetClass);
+		if (!RespawnCountdownWidget)
+		{
+			UE_LOG(LogTencent_Edu_FPS, Error, TEXT("Could not spawn respawn countdown widget."));
+			return;
+		}
+
+		RespawnCountdownWidget->AddToPlayerScreen(150);
+	}
+
+	UpdateRespawnCountdown();
+	GetWorldTimerManager().SetTimer(
+		RespawnCountdownTimer,
+		this,
+		&AShooterPlayerController::UpdateRespawnCountdown,
+		0.1f,
+		true);
+}
+
+void AShooterPlayerController::UpdateRespawnCountdown()
+{
+	if (!RespawnCountdownWidget)
+	{
+		GetWorldTimerManager().ClearTimer(RespawnCountdownTimer);
+		return;
+	}
+
+	const AGameStateBase* GameState = GetWorld()->GetGameState();
+	const float ServerTime = GameState
+		? GameState->GetServerWorldTimeSeconds()
+		: GetWorld()->GetTimeSeconds();
+	const int32 RemainingSeconds = FMath::Max(
+		0,
+		FMath::CeilToInt(RespawnEndServerTime - ServerTime));
+	RespawnCountdownWidget->SetRemainingSeconds(RemainingSeconds);
+
+	if (RemainingSeconds <= 0)
+	{
+		GetWorldTimerManager().ClearTimer(RespawnCountdownTimer);
+	}
+}
+
+void AShooterPlayerController::HideRespawnCountdown()
+{
+	GetWorldTimerManager().ClearTimer(RespawnCountdownTimer);
+	RespawnEndServerTime = 0.0f;
+
+	if (RespawnCountdownWidget)
+	{
+		RespawnCountdownWidget->RemoveFromParent();
+		RespawnCountdownWidget = nullptr;
+	}
+}
+
 bool AShooterPlayerController::SelectTeamSlot(EEduTeam Team, int32 SlotIndex)
 {
 	if (!IsLocalPlayerController())
@@ -415,6 +507,8 @@ void AShooterPlayerController::ShowMatchResult(EEduTeam WinningTeam)
 	{
 		return;
 	}
+
+	HideRespawnCountdown();
 
 	if (TeamSelectionWidget)
 	{

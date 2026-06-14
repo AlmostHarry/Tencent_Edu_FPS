@@ -14,6 +14,7 @@ class UPawnNoiseEmitterComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FBulletCountUpdatedDelegate, int32, MagazineSize, int32, Bullets);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDamagedDelegate, float, LifePercent);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FDeathStartedDelegate, float, RespawnEndServerTime);
 
 /**
  *  A player controllable first person shooter character
@@ -77,6 +78,10 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_IsDead)
 	bool bIsDead = false;
 
+	/** Server world time when this character will be destroyed for respawn. */
+	UPROPERTY(Replicated)
+	float RespawnEndServerTime = 0.0f;
+
 	UPROPERTY(EditAnywhere, Category ="Destruction", meta = (ClampMin = 0, ClampMax = 10, Units = "s"))
 	float RespawnTime = 5.0f;
 
@@ -96,6 +101,9 @@ public:
 
 	/** Damaged delegate */
 	FDamagedDelegate OnDamaged;
+
+	/** Death notification used by the owning player's local respawn UI. */
+	FDeathStartedDelegate OnDeathStarted;
 
 public:
 
@@ -223,4 +231,7 @@ public:
 
 	/** Returns true if the character is dead */
 	bool IsDead() const;
+
+	/** Returns the synchronized server time at which respawn should occur. */
+	float GetRespawnEndServerTime() const { return RespawnEndServerTime; }
 };

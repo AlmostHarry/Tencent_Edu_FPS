@@ -16,6 +16,7 @@ class UShooterBulletCounterUI;
 class UEduMatchResultWidget;
 class UEduMatchModeWidget;
 class UEduTeamSelectionWidget;
+class UEduRespawnCountdownWidget;
 enum class EEduMatchModeWidgetState : uint8;
 
 /**
@@ -77,6 +78,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
 	TSubclassOf<UEduMatchModeWidget> MatchModeWidgetClass;
 
+	/** Type of respawn countdown widget to show after local player death */
+	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
+	TSubclassOf<UEduRespawnCountdownWidget> RespawnCountdownWidgetClass;
+
 	/** Tag to grant the possessed pawn to flag it as the player */
 	UPROPERTY(EditAnywhere, Category="Shooter|Player")
 	FName PlayerPawnTag = FName("Player");
@@ -100,6 +105,13 @@ protected:
 	/** Simple match result overlay */
 	UPROPERTY()
 	TObjectPtr<UEduMatchResultWidget> MatchResultWidget;
+
+	/** Local-only respawn countdown overlay */
+	UPROPERTY()
+	TObjectPtr<UEduRespawnCountdownWidget> RespawnCountdownWidget;
+
+	FTimerHandle RespawnCountdownTimer;
+	float RespawnEndServerTime = 0.0f;
 
 	/** Team and slot selected by this player */
 	UPROPERTY(BlueprintReadOnly, Category="Shooter|Team", meta=(AllowPrivateAccess="true"))
@@ -138,6 +150,10 @@ protected:
 	UFUNCTION()
 	void OnPawnDamaged(float LifePercent);
 
+	/** Starts the local countdown using the replicated server respawn time */
+	UFUNCTION()
+	void OnPawnDeathStarted(float InRespawnEndServerTime);
+
 	/** Returns true if the player should use UMG touch controls */
 	bool ShouldUseTouchControls() const;
 
@@ -157,6 +173,8 @@ protected:
 	void OnReplicatedMatchEnded(EEduTeam WinningTeam);
 	void OnMatchSetupChanged(EEduMatchMode MatchMode, bool bMatchStarted);
 	void CompleteTeamSlotSelection(const FEduTeamSlotSelection& Selection);
+	void UpdateRespawnCountdown();
+	void HideRespawnCountdown();
 
 	UFUNCTION(Server, Reliable)
 	void ServerSelectMatchMode(EEduMatchMode MatchMode);

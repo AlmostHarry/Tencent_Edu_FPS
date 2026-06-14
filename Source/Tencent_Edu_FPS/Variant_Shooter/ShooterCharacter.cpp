@@ -44,6 +44,7 @@ void AShooterCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AShooterCharacter, CurrentHP);
 	DOREPLIFETIME(AShooterCharacter, CurrentWeapon);
 	DOREPLIFETIME(AShooterCharacter, bIsDead);
+	DOREPLIFETIME(AShooterCharacter, RespawnEndServerTime);
 }
 
 void AShooterCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
@@ -429,6 +430,7 @@ void AShooterCharacter::Die(AController* KillerController)
 
 	bIsDead = true;
 	CurrentHP = 0.0f;
+	RespawnEndServerTime = GetWorld()->GetTimeSeconds() + RespawnTime;
 
 	HandleDeathVisuals();
 
@@ -491,6 +493,7 @@ void AShooterCharacter::HandleDeathVisuals()
 	GetCharacterMovement()->StopMovementImmediately();
 	DisableInput(nullptr);
 	OnBulletCountUpdated.Broadcast(0, 0);
+	OnDeathStarted.Broadcast(RespawnEndServerTime);
 	BP_OnDeath();
 }
 

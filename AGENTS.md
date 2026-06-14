@@ -64,6 +64,7 @@ An initial server-authoritative multiplayer pass is now implemented:
 - Team scores and the winning team replicate through `EduShooterGameState`.
 - Human team-slot identity replicates through `EduShooterPlayerState`.
 - Each local player owns their HUD, team selector, and match result UI.
+- A dead human player sees a local respawn countdown driven by the replicated server respawn time.
 - Match restart is requested from a client and performed by server travel.
 
 Important weapon networking constraints:
@@ -94,6 +95,7 @@ Important implementation files:
 - `Source/Tencent_Edu_FPS/Variant_Shooter/EduShooterGameState.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/EduShooterPlayerState.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/UI/EduTeamSelectionWidget.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/UI/EduRespawnCountdownWidget.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterGameMode.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterPlayerController.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterCharacter.*`
@@ -201,5 +203,6 @@ Before considering the project ready:
 - Enemy damage and death are synchronized.
 - Score is synchronized.
 - Victory state is synchronized.
+- Each dead human player sees the respawn countdown, and it disappears after possessing the new pawn.
 - Respawn and match restart remain synchronized.
 - The repo does not include generated UE folders or packaged build output.
