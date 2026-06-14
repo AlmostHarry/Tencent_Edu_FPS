@@ -166,6 +166,28 @@ unless the project begins depending on those assets.
 
 If any required `.uasset` or `.umap` file is larger than GitHub's normal file limit, use Git LFS or replace/compress the asset before submission.
 
+### Commit and Push Workflow
+
+When asked to commit and push changes:
+
+1. Run `git status --short`, confirm the current branch, and inspect the configured remote.
+2. Review the relevant diff before staging. Preserve unrelated user changes and untracked files.
+3. Stage only the files that belong to the requested change by listing their paths explicitly. Do not use
+   `git add .` when the worktree contains unrelated changes.
+4. Check `git diff --cached --check`, `git diff --cached --stat`, and
+   `git diff --cached --name-status` before committing.
+5. Use a concise imperative commit message that describes the completed change.
+6. Push the current branch explicitly, for example `git push origin main`.
+7. Verify that local `HEAD` and the remote tracking branch resolve to the same commit after pushing.
+8. Report the commit hash, message, push destination, and any changes intentionally left uncommitted.
+
+If `.git/index.lock` blocks a Git write:
+
+- First confirm that no `git` or `git-lfs` process is running.
+- Confirm that the lock is the repository's exact `.git/index.lock` path.
+- Remove only that stale lock file, then retry the interrupted Git command.
+- Never delete other files inside `.git` or reset unrelated worktree changes to solve a lock problem.
+
 ## Development Priorities
 
 Completed MVP milestones:
