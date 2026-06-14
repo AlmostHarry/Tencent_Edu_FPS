@@ -4,7 +4,8 @@
 #include "Blueprint/UserWidget.h"
 #include "EduMatchModeWidget.generated.h"
 
-class FReply;
+class UButton;
+class UTextBlock;
 
 UENUM()
 enum class EEduMatchModeWidgetState : uint8
@@ -16,7 +17,7 @@ enum class EEduMatchModeWidgetState : uint8
 };
 
 /**
- * Native setup screen shown before team-slot selection.
+ * UMG base class for the match mode selection screen.
  */
 UCLASS()
 class TENCENT_EDU_FPS_API UEduMatchModeWidget : public UUserWidget
@@ -27,11 +28,28 @@ public:
 	void SetDisplayState(EEduMatchModeWidgetState NewState);
 
 protected:
-	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void NativeConstruct() override;
 
 private:
-	FReply SelectSinglePlayer();
-	FReply SelectTwoPlayer();
+	UFUNCTION()
+	void SelectSinglePlayer();
+
+	UFUNCTION()
+	void SelectTwoPlayer();
+
+	void RefreshDisplay();
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> TitleText;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UTextBlock> DescriptionText;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> SinglePlayerButton;
+
+	UPROPERTY(meta=(BindWidget))
+	TObjectPtr<UButton> TwoPlayerButton;
 
 	EEduMatchModeWidgetState DisplayState = EEduMatchModeWidgetState::WaitingForHost;
 };

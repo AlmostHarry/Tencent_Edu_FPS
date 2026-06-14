@@ -29,6 +29,13 @@ AShooterPlayerController::AShooterPlayerController()
 	{
 		ShooterUIClass = ShooterUIFinder.Class;
 	}
+
+	static ConstructorHelpers::FClassFinder<UEduMatchModeWidget> MatchModeWidgetFinder(
+		TEXT("/Game/Variant_Shooter/UI/WBP_MatchMode"));
+	if (MatchModeWidgetFinder.Succeeded())
+	{
+		MatchModeWidgetClass = MatchModeWidgetFinder.Class;
+	}
 }
 
 void AShooterPlayerController::BeginPlay()
@@ -281,7 +288,7 @@ void AShooterPlayerController::ShowMatchModeScreen(EEduMatchModeWidgetState Disp
 		MatchModeWidget = nullptr;
 	}
 
-	MatchModeWidget = CreateWidget<UEduMatchModeWidget>(this, UEduMatchModeWidget::StaticClass());
+	MatchModeWidget = CreateWidget<UEduMatchModeWidget>(this, MatchModeWidgetClass);
 	if (!MatchModeWidget)
 	{
 		UE_LOG(LogTencent_Edu_FPS, Error, TEXT("Could not spawn match mode widget."));

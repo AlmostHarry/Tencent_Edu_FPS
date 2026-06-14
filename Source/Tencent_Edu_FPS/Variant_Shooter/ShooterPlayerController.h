@@ -73,6 +73,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
 	TSubclassOf<UEduTeamSelectionWidget> TeamSelectionWidgetClass;
 
+	/** Type of match mode selection UI widget to spawn */
+	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
+	TSubclassOf<UEduMatchModeWidget> MatchModeWidgetClass;
+
 	/** Tag to grant the possessed pawn to flag it as the player */
 	UPROPERTY(EditAnywhere, Category="Shooter|Player")
 	FName PlayerPawnTag = FName("Player");
