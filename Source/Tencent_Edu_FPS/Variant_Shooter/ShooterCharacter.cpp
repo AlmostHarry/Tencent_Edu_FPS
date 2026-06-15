@@ -341,44 +341,49 @@ void AShooterCharacter::SetServerWeaponTargetLocation(const FVector& AimTarget)
 	bHasServerWeaponTarget = true;
 }
 
-void AShooterCharacter::AddWeaponClass(const TSubclassOf<AShooterWeapon>& WeaponClass)
+bool AShooterCharacter::AddWeaponClass(const TSubclassOf<AShooterWeapon>& WeaponClass)
 {
-	if (!HasAuthority())
+	if (!HasAuthority() || !WeaponClass)
 	{
-		return;
+		return false;
 	}
 
 	// do we already own this weapon?
 	AShooterWeapon* OwnedWeapon = FindWeaponOfType(WeaponClass);
 
-	if (!OwnedWeapon)
+	if (OwnedWeapon)
 	{
-		// spawn the new weapon
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.Owner = this;
-		SpawnParams.Instigator = this;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		SpawnParams.TransformScaleMethod = ESpawnActorScaleMethod::MultiplyWithRoot;
-
-		AShooterWeapon* AddedWeapon = GetWorld()->SpawnActor<AShooterWeapon>(WeaponClass, GetActorTransform(), SpawnParams);
-
-		if (AddedWeapon)
-		{
-			// add the weapon to the owned list
-			OwnedWeapons.Add(AddedWeapon);
-
-			// if we have an existing weapon, deactivate it
-			if (CurrentWeapon)
-			{
-				CurrentWeapon->DeactivateWeapon();
-			}
-
-			// switch to the new weapon
-			CurrentWeapon = AddedWeapon;
-			CurrentWeapon->ActivateWeapon();
-			ForceNetUpdate();
-		}
+		return false;
 	}
+
+	// spawn the new weapon
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	SpawnParams.TransformScaleMethod = ESpawnActorScaleMethod::MultiplyWithRoot;
+
+	AShooterWeapon* AddedWeapon = GetWorld()->SpawnActor<AShooterWeapon>(WeaponClass, GetActorTransform(), SpawnParams);
+
+	if (!AddedWeapon)
+	{
+		return false;
+	}
+
+	// add the weapon to the owned list
+	OwnedWeapons.Add(AddedWeapon);
+
+	// if we have an existing weapon, deactivate it
+	if (CurrentWeapon)
+	{
+		CurrentWeapon->DeactivateWeapon();
+	}
+
+	// switch to the new weapon
+	CurrentWeapon = AddedWeapon;
+	CurrentWeapon->ActivateWeapon();
+	ForceNetUpdate();
+	return true;
 }
 
 void AShooterCharacter::OnWeaponActivated(AShooterWeapon* Weapon)

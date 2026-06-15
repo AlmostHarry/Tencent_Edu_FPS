@@ -46,6 +46,7 @@ protected:
 	FName DeathTag = FName("Dead");
 
 	/** Pointer to the equipped weapon */
+	UPROPERTY(ReplicatedUsing=OnRep_Weapon)
 	TObjectPtr<AShooterWeapon> Weapon;
 
 	/** Type of weapon to spawn for this character */
@@ -129,7 +130,7 @@ public:
 	virtual FVector GetWeaponTargetLocation() override;
 
 	/** Gives a weapon of this class to the owner */
-	virtual void AddWeaponClass(const TSubclassOf<AShooterWeapon>& WeaponClass) override;
+	virtual bool AddWeaponClass(const TSubclassOf<AShooterWeapon>& WeaponClass) override;
 
 	/** Activates the passed weapon */
 	virtual void OnWeaponActivated(AShooterWeapon* Weapon) override;
@@ -155,6 +156,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_IsDead();
+
+	UFUNCTION()
+	void OnRep_Weapon();
 
 	void HandleDeathVisuals();
 

@@ -54,7 +54,7 @@ protected:
 
 	/** Max HP this character can have */
 	UPROPERTY(EditAnywhere, Category="Health")
-	float MaxHP = 500.0f;
+	float MaxHP = 100.0f;
 
 	/** Current HP remaining to this character */
 	UPROPERTY(ReplicatedUsing=OnRep_CurrentHP)
@@ -184,7 +184,7 @@ public:
 	virtual FVector GetWeaponTargetLocation() override;
 
 	/** Gives a weapon of this class to the owner */
-	virtual void AddWeaponClass(const TSubclassOf<AShooterWeapon>& WeaponClass) override;
+	virtual bool AddWeaponClass(const TSubclassOf<AShooterWeapon>& WeaponClass) override;
 
 	/** Activates the passed weapon */
 	virtual void OnWeaponActivated(AShooterWeapon* Weapon) override;

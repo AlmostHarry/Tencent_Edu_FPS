@@ -37,11 +37,6 @@ void AShooterGameMode::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
 	bMatchShuttingDown = true;
 
-	for (FEduManagedMatchSlot& Slot : MatchSlots)
-	{
-		GetWorld()->GetTimerManager().ClearTimer(Slot.AIRespawnTimer);
-	}
-
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -104,7 +99,6 @@ bool AShooterGameMode::ClaimPlayerSlot(AShooterPlayerController* PlayerControlle
 		MatchSlots[PreviousSlotIndex].HumanController.Reset();
 	}
 
-	GetWorld()->GetTimerManager().ClearTimer(TargetSlot.AIRespawnTimer);
 	if (AShooterNPC* ReplacedAI = TargetSlot.AIPawn.Get())
 	{
 		TargetSlot.AIPawn.Reset();
@@ -415,11 +409,6 @@ void AShooterGameMode::FinishMatch(EEduTeam WinningTeam)
 
 	bMatchEnded = true;
 
-	for (FEduManagedMatchSlot& Slot : MatchSlots)
-	{
-		GetWorld()->GetTimerManager().ClearTimer(Slot.AIRespawnTimer);
-	}
-
 	const TCHAR* TeamName = WinningTeam == EEduTeam::Red ? TEXT("Red") : TEXT("Blue");
 	UE_LOG(LogTemp, Log, TEXT("%s team won the match with %d points."), TeamName, WinningScore);
 
@@ -487,8 +476,5 @@ void AShooterGameMode::OnManagedAIDestroyed(AActor* DestroyedActor)
 
 	FEduManagedMatchSlot& Slot = MatchSlots[SlotIndex];
 	Slot.AIPawn.Reset();
-
-	FTimerDelegate RespawnDelegate;
-	RespawnDelegate.BindUObject(this, &AShooterGameMode::SpawnAIForSlot, SlotIndex);
-	GetWorld()->GetTimerManager().SetTimer(Slot.AIRespawnTimer, RespawnDelegate, AIRespawnDelay, false);
+	SpawnAIForSlot(SlotIndex);
 }

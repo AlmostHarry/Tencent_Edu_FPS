@@ -20,7 +20,6 @@ struct FEduManagedMatchSlot
 	TWeakObjectPtr<APlayerStart> PlayerStart;
 	TWeakObjectPtr<AShooterPlayerController> HumanController;
 	TWeakObjectPtr<AShooterNPC> AIPawn;
-	FTimerHandle AIRespawnTimer;
 };
 
 /**
@@ -52,10 +51,6 @@ protected:
 	/** Optional override for the AI class used to fill unoccupied slots */
 	UPROPERTY(EditAnywhere, Category="Shooter|Slots")
 	TSubclassOf<AShooterNPC> AICharacterClass;
-
-	/** Delay before an AI slot is refilled after death */
-	UPROPERTY(EditAnywhere, Category="Shooter|Slots", meta=(ClampMin=0.0, Units="s"))
-	float AIRespawnDelay = 3.0f;
 
 	/** Four managed 2v2 match slots */
 	TArray<FEduManagedMatchSlot> MatchSlots;

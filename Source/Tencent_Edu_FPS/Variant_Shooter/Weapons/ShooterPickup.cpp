@@ -79,7 +79,10 @@ void AShooterPickup::OnOverlap(UPrimitiveComponent* OverlappedComponent, AActor*
 	// have we collided against a weapon holder?
 	if (IShooterWeaponHolder* WeaponHolder = Cast<IShooterWeaponHolder>(OtherActor))
 	{
-		WeaponHolder->AddWeaponClass(WeaponClass);
+		if (!WeaponHolder->AddWeaponClass(WeaponClass))
+		{
+			return;
+		}
 
 		// hide this mesh
 		SetActorHiddenInGame(true);

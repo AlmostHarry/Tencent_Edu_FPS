@@ -19,12 +19,7 @@ void AShooterNPC::BeginPlay()
 
 	if (HasAuthority())
 	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.Owner = this;
-		SpawnParams.Instigator = this;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-		Weapon = GetWorld()->SpawnActor<AShooterWeapon>(WeaponClass, GetActorTransform(), SpawnParams);
+		AddWeaponClass(WeaponClass);
 	}
 }
 
@@ -41,6 +36,7 @@ void AShooterNPC::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AShooterNPC, CurrentHP);
 	DOREPLIFETIME(AShooterNPC, bIsDead);
+	DOREPLIFETIME(AShooterNPC, Weapon);
 }
 
 float AShooterNPC::TakeDamage(float Damage, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
@@ -146,14 +142,51 @@ FVector AShooterNPC::GetWeaponTargetLocation()
 	return OutHit.bBlockingHit ? OutHit.ImpactPoint : OutHit.TraceEnd;
 }
 
-void AShooterNPC::AddWeaponClass(const TSubclassOf<AShooterWeapon>& InWeaponClass)
+bool AShooterNPC::AddWeaponClass(const TSubclassOf<AShooterWeapon>& InWeaponClass)
 {
-	// unused
+	if (!HasAuthority() || bIsDead || !InWeaponClass || (Weapon && Weapon->IsA(InWeaponClass)))
+	{
+		return false;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AShooterWeapon* NewWeapon = GetWorld()->SpawnActor<AShooterWeapon>(
+		InWeaponClass,
+		GetActorTransform(),
+		SpawnParams);
+	if (!NewWeapon)
+	{
+		return false;
+	}
+
+	if (Weapon)
+	{
+		Weapon->DeactivateWeapon();
+		Weapon->Destroy();
+	}
+
+	Weapon = NewWeapon;
+	WeaponClass = InWeaponClass;
+	Weapon->ActivateWeapon();
+
+	if (bIsShooting)
+	{
+		Weapon->StartFiring();
+	}
+
+	return true;
 }
 
 void AShooterNPC::OnWeaponActivated(AShooterWeapon* InWeapon)
 {
-	// unused
+	if (InWeapon)
+	{
+		GetMesh()->SetAnimInstanceClass(InWeapon->GetThirdPersonAnimInstanceClass());
+	}
 }
 
 void AShooterNPC::OnWeaponDeactivated(AShooterWeapon* InWeapon)
@@ -251,6 +284,14 @@ void AShooterNPC::OnRep_IsDead()
 	if (bIsDead)
 	{
 		HandleDeathVisuals();
+	}
+}
+
+void AShooterNPC::OnRep_Weapon()
+{
+	if (Weapon)
+	{
+		OnWeaponActivated(Weapon);
 	}
 }
 

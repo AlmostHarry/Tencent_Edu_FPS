@@ -41,8 +41,8 @@ public:
 	/** Calculates and returns the aim location for the weapon */
 	virtual FVector GetWeaponTargetLocation() = 0;
 
-	/** Gives a weapon of this class to the owner */
-	virtual void AddWeaponClass(const TSubclassOf<AShooterWeapon>& WeaponClass) = 0;
+	/** Gives a weapon of this class to the owner. Returns true if the weapon was accepted. */
+	virtual bool AddWeaponClass(const TSubclassOf<AShooterWeapon>& WeaponClass) = 0;
 
 	/** Activates the passed weapon */
 	virtual void OnWeaponActivated(AShooterWeapon* Weapon) = 0;
