@@ -120,6 +120,25 @@ Important implementation files:
 - Store match-level replicated state in GameState when possible.
 - Keep GameMode server-only.
 
+### C++ Parent and Presentation Blueprint Workflow
+
+For new gameplay or UI types that need both stable logic and editable presentation:
+
+1. Create a C++ parent class for behavior, replicated state, validation, delegates, and Blueprint-facing
+   properties or events.
+2. Keep layout, styling, animation, asset references, and designer-tunable defaults in a Blueprint child.
+3. When editor automation is appropriate, use the Unreal Python Editor API to create and configure the
+   presentation Blueprint, including its parent class, components or widget tree, and required names.
+4. Treat Python as the asset-creation mechanism, not the runtime architecture. The resulting Blueprint
+   should remain editable in the Unreal Editor and should not require Python during gameplay.
+5. Compile and save the generated Blueprint, then run Blueprint compilation or project validation before
+   considering the asset complete.
+6. Commit both the C++ parent and every required `.uasset`; the project must work after a clean checkout.
+
+For Widget Blueprints, use C++ `BindWidget` fields only when the generated or manually created widget tree
+can guarantee the required widget names. Expose optional Blueprint events for visual effects and animation
+without moving authoritative gameplay logic into the Widget Blueprint.
+
 ## Local Unreal Engine
 
 This project currently uses UE 5.7.
