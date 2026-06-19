@@ -13,6 +13,7 @@
 #include "TimerManager.h"
 #include "ShooterGameMode.h"
 #include "EduShooterGameState.h"
+#include "EduShooterPlayerState.h"
 #include "Net/UnrealNetwork.h"
 
 AShooterCharacter::AShooterCharacter()
@@ -94,6 +95,13 @@ float AShooterCharacter::TakeDamage(float Damage, struct FDamageEvent const& Dam
 			return 0.0f;
 		}
 	}
+
+	if (Damage <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	RecordDamageInstigator(EventInstigator);
 
 	// Reduce HP
 	CurrentHP -= Damage;
@@ -439,6 +447,11 @@ void AShooterCharacter::Die(AController* KillerController)
 
 	HandleDeathVisuals();
 
+	if (AEduShooterPlayerState* VictimPlayerState = GetPlayerState<AEduShooterPlayerState>())
+	{
+		VictimPlayerState->AddDeath();
+	}
+
 	// increment the killer's team score
 	if (AShooterGameMode* GM = Cast<AShooterGameMode>(GetWorld()->GetAuthGameMode()))
 	{
@@ -447,6 +460,16 @@ void AShooterCharacter::Die(AController* KillerController)
 			GM->IncrementTeamScore(static_cast<uint8>(Killer->GetTeam()));
 		}
 	}
+
+	if (KillerController && KillerController != GetController())
+	{
+		if (AEduShooterPlayerState* KillerPlayerState = KillerController->GetPlayerState<AEduShooterPlayerState>())
+		{
+			KillerPlayerState->AddKill();
+		}
+	}
+	AwardAssists(KillerController);
+	DamageInstigatorsThisLife.Reset();
 
 	// schedule character respawn
 	GetWorld()->GetTimerManager().SetTimer(RespawnTimer, this, &AShooterCharacter::OnRespawn, RespawnTime, false);
@@ -500,6 +523,38 @@ void AShooterCharacter::HandleDeathVisuals()
 	OnBulletCountUpdated.Broadcast(0, 0);
 	OnDeathStarted.Broadcast(RespawnEndServerTime);
 	BP_OnDeath();
+}
+
+void AShooterCharacter::RecordDamageInstigator(AController* DamageInstigator)
+{
+	if (!HasAuthority() || !IsValid(DamageInstigator) || DamageInstigator == GetController())
+	{
+		return;
+	}
+
+	DamageInstigatorsThisLife.Add(DamageInstigator);
+}
+
+void AShooterCharacter::AwardAssists(AController* KillerController) const
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	for (const TWeakObjectPtr<AController>& DamageInstigator : DamageInstigatorsThisLife)
+	{
+		AController* AssistController = DamageInstigator.Get();
+		if (!IsValid(AssistController) || AssistController == KillerController || AssistController == GetController())
+		{
+			continue;
+		}
+
+		if (AEduShooterPlayerState* AssistPlayerState = AssistController->GetPlayerState<AEduShooterPlayerState>())
+		{
+			AssistPlayerState->AddAssist();
+		}
+	}
 }
 
 bool AShooterCharacter::CanProcessGameplayInput() const

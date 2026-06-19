@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "EduShooterPlayerState.h"
 #include "Blueprint/UserWidget.h"
 #include "EduMatchResultWidget.generated.h"
 
@@ -19,6 +20,9 @@ public:
 
 	/** Updates the result displayed by the widget */
 	void SetMatchWon(bool bWon);
+
+	/** Updates the local player's final KDA summary */
+	void SetPlayerKDA(const FEduPlayerMatchStats& Stats);
 
 	/** Restarts the current map and returns to team selection */
 	UFUNCTION(BlueprintCallable, Category="Match")
@@ -40,4 +44,14 @@ protected:
 	/** Restart button supplied by the Widget Blueprint */
 	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UButton> RestartButton;
+
+	/** Blueprint hook for custom final KDA presentation. */
+	UFUNCTION(BlueprintImplementableEvent, Category="Match", meta=(DisplayName="Player KDA Updated"))
+	void BP_OnPlayerKDAUpdated(int32 Kills, int32 Deaths, int32 Assists, const FText& DisplayText);
+
+private:
+	FEduPlayerMatchStats CachedStats;
+
+	FText GetPlayerKDAText() const;
+	void BroadcastPlayerKDAUpdated();
 };

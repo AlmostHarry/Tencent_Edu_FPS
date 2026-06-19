@@ -9,10 +9,17 @@ void UEduMatchResultWidget::SetMatchWon(bool bWon)
 	BP_SetMatchResult(bWon);
 }
 
+void UEduMatchResultWidget::SetPlayerKDA(const FEduPlayerMatchStats& Stats)
+{
+	CachedStats = Stats;
+	BroadcastPlayerKDAUpdated();
+}
+
 void UEduMatchResultWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 	RestartButton->OnClicked.AddUniqueDynamic(this, &UEduMatchResultWidget::RestartMatch);
+	BroadcastPlayerKDAUpdated();
 }
 
 void UEduMatchResultWidget::BP_SetMatchResult_Implementation(bool bWon)
@@ -29,4 +36,22 @@ void UEduMatchResultWidget::RestartMatch()
 	{
 		PlayerController->RequestRestartMatch();
 	}
+}
+
+FText UEduMatchResultWidget::GetPlayerKDAText() const
+{
+	return FText::FromString(FString::Printf(
+		TEXT("Your KDA: %d/%d/%d"),
+		CachedStats.Kills,
+		CachedStats.Deaths,
+		CachedStats.Assists));
+}
+
+void UEduMatchResultWidget::BroadcastPlayerKDAUpdated()
+{
+	BP_OnPlayerKDAUpdated(
+		CachedStats.Kills,
+		CachedStats.Deaths,
+		CachedStats.Assists,
+		GetPlayerKDAText());
 }

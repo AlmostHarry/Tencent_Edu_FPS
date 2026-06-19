@@ -87,6 +87,8 @@ protected:
 
 	FTimerHandle RespawnTimer;
 
+	TSet<TWeakObjectPtr<AController>> DamageInstigatorsThisLife;
+
 	/** Most recent client-provided aim target used by the authoritative weapon */
 	FVector ServerWeaponTargetLocation = FVector::ZeroVector;
 
@@ -224,6 +226,8 @@ protected:
 	void HandleDeathVisuals();
 	bool CanProcessGameplayInput() const;
 	void RequestFireShot();
+	void RecordDamageInstigator(AController* DamageInstigator);
+	void AwardAssists(AController* KillerController) const;
 	FVector CalculateLocalWeaponTargetLocation() const;
 	void SetServerWeaponTargetLocation(const FVector& AimTarget);
 

@@ -19,6 +19,7 @@
 #include "EduMatchModeWidget.h"
 #include "EduRespawnCountdownWidget.h"
 #include "EduTeamSelectionWidget.h"
+#include "EduKDAWidget.h"
 #include "Tencent_Edu_FPS.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 
@@ -43,6 +44,13 @@ AShooterPlayerController::AShooterPlayerController()
 	if (RespawnWidgetFinder.Succeeded())
 	{
 		RespawnCountdownWidgetClass = RespawnWidgetFinder.Class;
+	}
+
+	static ConstructorHelpers::FClassFinder<UEduKDAWidget> KDAWidgetFinder(
+		TEXT("/Game/Variant_Shooter/UI/WBP_KDA"));
+	if (KDAWidgetFinder.Succeeded())
+	{
+		KDAWidgetClass = KDAWidgetFinder.Class;
 	}
 }
 
@@ -89,7 +97,19 @@ void AShooterPlayerController::BeginPlay()
 			ShooterUI->AddToPlayerScreen(0);
 		}
 
+		KDAWidget = CreateWidget<UEduKDAWidget>(this, KDAWidgetClass);
+		if (KDAWidget)
+		{
+			KDAWidget->AddToPlayerScreen(50);
+		}
+		else
+		{
+			UE_LOG(LogTencent_Edu_FPS, Warning,
+				TEXT("Could not spawn KDA widget. Create /Game/Variant_Shooter/UI/WBP_KDA as a child of EduKDAWidget."));
+		}
+
 		BindToShooterGameState();
+		BindToShooterPlayerState();
 		InitializePossessedPawn(GetPawn());
 	}
 }
@@ -105,6 +125,11 @@ void AShooterPlayerController::EndPlay(EEndPlayReason::Type EndPlayReason)
 			ShooterGameState->OnTeamScoreChanged.RemoveAll(this);
 			ShooterGameState->OnMatchEnded.RemoveAll(this);
 			ShooterGameState->OnMatchSetupChanged.RemoveAll(this);
+		}
+		if (AEduShooterPlayerState* ShooterPlayerState = BoundStatsPlayerState.Get())
+		{
+			ShooterPlayerState->OnMatchStatsChanged.RemoveAll(this);
+			BoundStatsPlayerState.Reset();
 		}
 	}
 
@@ -123,6 +148,12 @@ void AShooterPlayerController::OnRep_Pawn()
 {
 	Super::OnRep_Pawn();
 	InitializePossessedPawn(GetPawn());
+}
+
+void AShooterPlayerController::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+	BindToShooterPlayerState();
 }
 
 void AShooterPlayerController::SetupInputComponent()
@@ -525,6 +556,10 @@ void AShooterPlayerController::ShowMatchResult(EEduTeam WinningTeam)
 
 	const bool bLocalPlayerWon = bHasSelectedTeamSlot && TeamSlotSelection.Team == WinningTeam;
 	MatchResultWidget->SetMatchWon(bLocalPlayerWon);
+	if (const AEduShooterPlayerState* ShooterPlayerState = GetPlayerState<AEduShooterPlayerState>())
+	{
+		MatchResultWidget->SetPlayerKDA(ShooterPlayerState->GetMatchStats());
+	}
 	MatchResultWidget->AddToPlayerScreen(200);
 
 	FInputModeUIOnly InputMode;
@@ -559,11 +594,49 @@ void AShooterPlayerController::BindToShooterGameState()
 	}
 }
 
+void AShooterPlayerController::BindToShooterPlayerState()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	AEduShooterPlayerState* ShooterPlayerState = GetPlayerState<AEduShooterPlayerState>();
+	if (BoundStatsPlayerState.Get() == ShooterPlayerState)
+	{
+		if (ShooterPlayerState)
+		{
+			OnPlayerMatchStatsChanged(ShooterPlayerState->GetMatchStats());
+		}
+		return;
+	}
+
+	if (AEduShooterPlayerState* PreviousPlayerState = BoundStatsPlayerState.Get())
+	{
+		PreviousPlayerState->OnMatchStatsChanged.RemoveAll(this);
+	}
+
+	BoundStatsPlayerState = ShooterPlayerState;
+	if (ShooterPlayerState)
+	{
+		ShooterPlayerState->OnMatchStatsChanged.AddUObject(this, &AShooterPlayerController::OnPlayerMatchStatsChanged);
+		OnPlayerMatchStatsChanged(ShooterPlayerState->GetMatchStats());
+	}
+}
+
 void AShooterPlayerController::OnTeamScoreChanged(uint8 TeamByte, int32 Score)
 {
 	if (ShooterUI)
 	{
 		ShooterUI->BP_UpdateScore(TeamByte, Score);
+	}
+}
+
+void AShooterPlayerController::OnPlayerMatchStatsChanged(const FEduPlayerMatchStats& Stats)
+{
+	if (KDAWidget)
+	{
+		KDAWidget->SetKDA(Stats.Kills, Stats.Deaths, Stats.Assists);
 	}
 }
 

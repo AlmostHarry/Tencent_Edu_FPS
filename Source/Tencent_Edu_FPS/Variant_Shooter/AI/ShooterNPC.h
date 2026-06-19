@@ -90,6 +90,8 @@ protected:
 	/** Deferred destruction on death timer */
 	FTimerHandle DeathTimer;
 
+	TSet<TWeakObjectPtr<AController>> DamageInstigatorsThisLife;
+
 public:
 
 	/** Delegate called when this NPC dies */
@@ -161,6 +163,8 @@ protected:
 	void OnRep_Weapon();
 
 	void HandleDeathVisuals();
+	void RecordDamageInstigator(AController* DamageInstigator);
+	void AwardAssists(AController* KillerController) const;
 
 public:
 

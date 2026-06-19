@@ -8,6 +8,7 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "Engine/World.h"
 #include "ShooterGameMode.h"
+#include "EduShooterPlayerState.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "TimerManager.h"
@@ -59,6 +60,13 @@ float AShooterNPC::TakeDamage(float Damage, struct FDamageEvent const& DamageEve
 			return 0.0f;
 		}
 	}
+
+	if (Damage <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	RecordDamageInstigator(EventInstigator);
 
 	// Reduce HP
 	CurrentHP -= Damage;
@@ -231,6 +239,16 @@ void AShooterNPC::Die(AController* KillerController)
 		}
 	}
 
+	if (KillerController)
+	{
+		if (AEduShooterPlayerState* KillerPlayerState = KillerController->GetPlayerState<AEduShooterPlayerState>())
+		{
+			KillerPlayerState->AddKill();
+		}
+	}
+	AwardAssists(KillerController);
+	DamageInstigatorsThisLife.Reset();
+
 	HandleDeathVisuals();
 
 	// schedule actor destruction
@@ -303,4 +321,36 @@ void AShooterNPC::HandleDeathVisuals()
 	GetMesh()->SetCollisionProfileName(RagdollCollisionProfile);
 	GetMesh()->SetSimulatePhysics(true);
 	GetMesh()->SetPhysicsBlendWeight(1.0f);
+}
+
+void AShooterNPC::RecordDamageInstigator(AController* DamageInstigator)
+{
+	if (!HasAuthority() || !IsValid(DamageInstigator) || DamageInstigator == GetController())
+	{
+		return;
+	}
+
+	DamageInstigatorsThisLife.Add(DamageInstigator);
+}
+
+void AShooterNPC::AwardAssists(AController* KillerController) const
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	for (const TWeakObjectPtr<AController>& DamageInstigator : DamageInstigatorsThisLife)
+	{
+		AController* AssistController = DamageInstigator.Get();
+		if (!IsValid(AssistController) || AssistController == KillerController || AssistController == GetController())
+		{
+			continue;
+		}
+
+		if (AEduShooterPlayerState* AssistPlayerState = AssistController->GetPlayerState<AEduShooterPlayerState>())
+		{
+			AssistPlayerState->AddAssist();
+		}
+	}
 }

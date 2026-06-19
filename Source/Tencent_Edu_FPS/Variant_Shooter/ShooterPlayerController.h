@@ -17,6 +17,9 @@ class UEduMatchResultWidget;
 class UEduMatchModeWidget;
 class UEduTeamSelectionWidget;
 class UEduRespawnCountdownWidget;
+class UEduKDAWidget;
+class AEduShooterPlayerState;
+struct FEduPlayerMatchStats;
 enum class EEduMatchModeWidgetState : uint8;
 
 /**
@@ -82,6 +85,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
 	TSubclassOf<UEduRespawnCountdownWidget> RespawnCountdownWidgetClass;
 
+	/** Type of local KDA widget to show below the health bar */
+	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
+	TSubclassOf<UEduKDAWidget> KDAWidgetClass;
+
 	/** Tag to grant the possessed pawn to flag it as the player */
 	UPROPERTY(EditAnywhere, Category="Shooter|Player")
 	FName PlayerPawnTag = FName("Player");
@@ -93,6 +100,10 @@ protected:
 	/** Team score UI for this local player */
 	UPROPERTY()
 	TObjectPtr<UShooterUI> ShooterUI;
+
+	/** Local player's personal KDA UI */
+	UPROPERTY()
+	TObjectPtr<UEduKDAWidget> KDAWidget;
 
 	/** Team-slot selection UI for the first local player */
 	UPROPERTY()
@@ -113,6 +124,8 @@ protected:
 	FTimerHandle RespawnCountdownTimer;
 	float RespawnEndServerTime = 0.0f;
 
+	TWeakObjectPtr<AEduShooterPlayerState> BoundStatsPlayerState;
+
 	/** Team and slot selected by this player */
 	UPROPERTY(BlueprintReadOnly, Category="Shooter|Team", meta=(AllowPrivateAccess="true"))
 	FEduTeamSlotSelection TeamSlotSelection;
@@ -131,6 +144,9 @@ protected:
 
 	/** Rebind local HUD delegates after the replicated pawn changes */
 	virtual void OnRep_Pawn() override;
+
+	/** Rebind local HUD delegates after the replicated PlayerState changes */
+	virtual void OnRep_PlayerState() override;
 
 	/** Initialize input bindings */
 	virtual void SetupInputComponent() override;
@@ -169,7 +185,11 @@ protected:
 	/** Binds local score and victory UI to replicated match state */
 	void BindToShooterGameState();
 
+	/** Binds local personal stats UI to replicated PlayerState */
+	void BindToShooterPlayerState();
+
 	void OnTeamScoreChanged(uint8 TeamByte, int32 Score);
+	void OnPlayerMatchStatsChanged(const FEduPlayerMatchStats& Stats);
 	void OnReplicatedMatchEnded(EEduTeam WinningTeam);
 	void OnMatchSetupChanged(EEduMatchMode MatchMode, bool bMatchStarted);
 	void CompleteTeamSlotSelection(const FEduTeamSlotSelection& Selection);
