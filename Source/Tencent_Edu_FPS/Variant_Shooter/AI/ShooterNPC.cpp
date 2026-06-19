@@ -237,6 +237,8 @@ void AShooterNPC::Die(AController* KillerController)
 		{
 			GM->IncrementTeamScore(static_cast<uint8>(Killer->GetTeam()));
 		}
+
+		GM->RecordCharacterDeath(this, KillerController, DamageInstigatorsThisLife);
 	}
 
 	if (KillerController)

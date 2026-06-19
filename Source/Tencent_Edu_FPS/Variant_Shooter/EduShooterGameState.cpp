@@ -65,6 +65,106 @@ void AEduShooterGameState::SetMatchStarted()
 	BroadcastMatchState();
 }
 
+void AEduShooterGameState::InitializeScoreboard(const TArray<FEduTeamSlotSelection>& Selections)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	ScoreboardEntries.Reset();
+	for (const FEduTeamSlotSelection& Selection : Selections)
+	{
+		if (!Selection.IsValid())
+		{
+			continue;
+		}
+
+		FEduScoreboardEntry& Entry = ScoreboardEntries.AddDefaulted_GetRef();
+		Entry.Selection = Selection;
+		Entry.DisplayName = TEXT("Empty");
+	}
+
+	ForceNetUpdate();
+	BroadcastScoreboard();
+}
+
+void AEduShooterGameState::SetScoreboardOccupant(
+	const FEduTeamSlotSelection& Selection,
+	const FString& DisplayName,
+	bool bHuman)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	FEduScoreboardEntry* Entry = FindScoreboardEntry(Selection);
+	if (!Entry)
+	{
+		return;
+	}
+
+	Entry->DisplayName = DisplayName;
+	Entry->bHuman = bHuman;
+	ForceNetUpdate();
+	BroadcastScoreboard();
+}
+
+void AEduShooterGameState::AddScoreboardKill(const FEduTeamSlotSelection& Selection)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	FEduScoreboardEntry* Entry = FindScoreboardEntry(Selection);
+	if (!Entry)
+	{
+		return;
+	}
+
+	++Entry->Kills;
+	ForceNetUpdate();
+	BroadcastScoreboard();
+}
+
+void AEduShooterGameState::AddScoreboardDeath(const FEduTeamSlotSelection& Selection)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	FEduScoreboardEntry* Entry = FindScoreboardEntry(Selection);
+	if (!Entry)
+	{
+		return;
+	}
+
+	++Entry->Deaths;
+	ForceNetUpdate();
+	BroadcastScoreboard();
+}
+
+void AEduShooterGameState::AddScoreboardAssist(const FEduTeamSlotSelection& Selection)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	FEduScoreboardEntry* Entry = FindScoreboardEntry(Selection);
+	if (!Entry)
+	{
+		return;
+	}
+
+	++Entry->Assists;
+	ForceNetUpdate();
+	BroadcastScoreboard();
+}
+
 int32 AEduShooterGameState::GetTeamScore(EEduTeam Team) const
 {
 	if (Team == EEduTeam::Red)
@@ -82,11 +182,17 @@ void AEduShooterGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AEduShooterGameState, MatchState);
+	DOREPLIFETIME(AEduShooterGameState, ScoreboardEntries);
 }
 
 void AEduShooterGameState::OnRep_MatchState()
 {
 	BroadcastMatchState();
+}
+
+void AEduShooterGameState::OnRep_ScoreboardEntries()
+{
+	BroadcastScoreboard();
 }
 
 void AEduShooterGameState::BroadcastMatchState()
@@ -99,4 +205,17 @@ void AEduShooterGameState::BroadcastMatchState()
 	{
 		OnMatchEnded.Broadcast(MatchState.WinningTeam);
 	}
+}
+
+void AEduShooterGameState::BroadcastScoreboard()
+{
+	OnScoreboardChanged.Broadcast(ScoreboardEntries);
+}
+
+FEduScoreboardEntry* AEduShooterGameState::FindScoreboardEntry(const FEduTeamSlotSelection& Selection)
+{
+	return ScoreboardEntries.FindByPredicate([&Selection](const FEduScoreboardEntry& Entry)
+	{
+		return Entry.Selection.Team == Selection.Team && Entry.Selection.SlotIndex == Selection.SlotIndex;
+	});
 }

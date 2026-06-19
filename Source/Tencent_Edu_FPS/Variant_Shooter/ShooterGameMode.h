@@ -80,6 +80,9 @@ public:
 	/** Releases a player's occupied slot */
 	void ReleasePlayerSlot(AShooterPlayerController* PlayerController);
 
+	/** Records K/D/A for the managed Tab scoreboard. */
+	void RecordCharacterDeath(APawn* VictimPawn, AController* KillerController, const TSet<TWeakObjectPtr<AController>>& DamageInstigators);
+
 	/** Returns the spawn transform and team assigned to a player */
 	bool GetPlayerSpawnData(const AShooterPlayerController* PlayerController, FTransform& OutTransform, EEduTeam& OutTeam) const;
 
@@ -101,6 +104,11 @@ private:
 	void FinishMatch(EEduTeam WinningTeam);
 	int32 FindSlotIndex(const FEduTeamSlotSelection& Selection) const;
 	int32 FindPlayerSlotIndex(const AShooterPlayerController* PlayerController) const;
+	int32 FindControllerSlotIndex(const AController* Controller) const;
+	int32 FindPawnSlotIndex(const APawn* Pawn) const;
+	void InitializeScoreboard();
+	void RefreshScoreboardOccupant(int32 SlotArrayIndex);
+	FString GetSlotLabel(const FEduTeamSlotSelection& Selection) const;
 
 	UFUNCTION()
 	void OnManagedAIDestroyed(AActor* DestroyedActor);

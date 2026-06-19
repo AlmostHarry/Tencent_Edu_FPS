@@ -97,6 +97,7 @@ bool AShooterGameMode::ClaimPlayerSlot(AShooterPlayerController* PlayerControlle
 	if (MatchSlots.IsValidIndex(PreviousSlotIndex))
 	{
 		MatchSlots[PreviousSlotIndex].HumanController.Reset();
+		RefreshScoreboardOccupant(PreviousSlotIndex);
 	}
 
 	if (AShooterNPC* ReplacedAI = TargetSlot.AIPawn.Get())
@@ -106,6 +107,7 @@ bool AShooterGameMode::ClaimPlayerSlot(AShooterPlayerController* PlayerControlle
 	}
 
 	TargetSlot.HumanController = PlayerController;
+	RefreshScoreboardOccupant(TargetSlotIndex);
 	if (AEduShooterPlayerState* ShooterPlayerState = PlayerController->GetPlayerState<AEduShooterPlayerState>())
 	{
 		ShooterPlayerState->SetTeamSlotSelection(Selection);
@@ -159,6 +161,7 @@ void AShooterGameMode::ReleasePlayerSlot(AShooterPlayerController* PlayerControl
 	if (MatchSlots.IsValidIndex(SlotIndex))
 	{
 		MatchSlots[SlotIndex].HumanController.Reset();
+		RefreshScoreboardOccupant(SlotIndex);
 		if (bMatchPopulationStarted)
 		{
 			FillUnoccupiedSlotsWithAI();
@@ -171,6 +174,46 @@ void AShooterGameMode::ReleasePlayerSlot(AShooterPlayerController* PlayerControl
 		{
 			ShooterPlayerState->ClearTeamSlotSelection();
 		}
+	}
+}
+
+void AShooterGameMode::RecordCharacterDeath(
+	APawn* VictimPawn,
+	AController* KillerController,
+	const TSet<TWeakObjectPtr<AController>>& DamageInstigators)
+{
+	AEduShooterGameState* ShooterGameState = GetGameState<AEduShooterGameState>();
+	if (!ShooterGameState || !IsValid(VictimPawn))
+	{
+		return;
+	}
+
+	const int32 VictimSlotIndex = FindPawnSlotIndex(VictimPawn);
+	if (MatchSlots.IsValidIndex(VictimSlotIndex))
+	{
+		ShooterGameState->AddScoreboardDeath(MatchSlots[VictimSlotIndex].Selection);
+	}
+
+	const int32 KillerSlotIndex = FindControllerSlotIndex(KillerController);
+	if (MatchSlots.IsValidIndex(KillerSlotIndex) && KillerSlotIndex != VictimSlotIndex)
+	{
+		ShooterGameState->AddScoreboardKill(MatchSlots[KillerSlotIndex].Selection);
+	}
+
+	TSet<int32> AwardedAssistSlots;
+	for (const TWeakObjectPtr<AController>& DamageInstigator : DamageInstigators)
+	{
+		const int32 AssistSlotIndex = FindControllerSlotIndex(DamageInstigator.Get());
+		if (!MatchSlots.IsValidIndex(AssistSlotIndex)
+			|| AssistSlotIndex == KillerSlotIndex
+			|| AssistSlotIndex == VictimSlotIndex
+			|| AwardedAssistSlots.Contains(AssistSlotIndex))
+		{
+			continue;
+		}
+
+		ShooterGameState->AddScoreboardAssist(MatchSlots[AssistSlotIndex].Selection);
+		AwardedAssistSlots.Add(AssistSlotIndex);
 	}
 }
 
@@ -343,6 +386,8 @@ void AShooterGameMode::InitializeMatchSlots()
 	{
 		UE_LOG(LogTemp, Error, TEXT("No AI character class was found on the disabled Shooter NPC spawners."));
 	}
+
+	InitializeScoreboard();
 }
 
 void AShooterGameMode::FillUnoccupiedSlotsWithAI()
@@ -394,6 +439,7 @@ void AShooterGameMode::SpawnAIForSlot(int32 SlotArrayIndex)
 		NPC->OnDestroyed.AddDynamic(this, &AShooterGameMode::OnManagedAIDestroyed);
 		Slot.AIPawn = NPC;
 		NPC->FinishSpawning(SpawnTransform);
+		RefreshScoreboardOccupant(SlotArrayIndex);
 
 		const TCHAR* TeamName = Slot.Selection.Team == EEduTeam::Red ? TEXT("Red") : TEXT("Blue");
 		UE_LOG(LogTemp, Log, TEXT("Spawned AI for %s slot %d."), TeamName, Slot.Selection.SlotIndex);
@@ -454,6 +500,108 @@ int32 AShooterGameMode::FindPlayerSlotIndex(const AShooterPlayerController* Play
 	{
 		return Slot.HumanController.Get() == PlayerController;
 	});
+}
+
+int32 AShooterGameMode::FindControllerSlotIndex(const AController* Controller) const
+{
+	if (!Controller)
+	{
+		return INDEX_NONE;
+	}
+
+	if (const AShooterPlayerController* PlayerController = Cast<AShooterPlayerController>(Controller))
+	{
+		return FindPlayerSlotIndex(PlayerController);
+	}
+
+	return FindPawnSlotIndex(Controller->GetPawn());
+}
+
+int32 AShooterGameMode::FindPawnSlotIndex(const APawn* Pawn) const
+{
+	if (!Pawn)
+	{
+		return INDEX_NONE;
+	}
+
+	return MatchSlots.IndexOfByPredicate([Pawn](const FEduManagedMatchSlot& Slot)
+	{
+		if (Slot.AIPawn.GetEvenIfUnreachable() == Pawn)
+		{
+			return true;
+		}
+
+		const AShooterPlayerController* HumanController = Slot.HumanController.Get();
+		return HumanController && HumanController->GetPawn() == Pawn;
+	});
+}
+
+void AShooterGameMode::InitializeScoreboard()
+{
+	AEduShooterGameState* ShooterGameState = GetGameState<AEduShooterGameState>();
+	if (!ShooterGameState)
+	{
+		return;
+	}
+
+	TArray<FEduTeamSlotSelection> Selections;
+	for (const FEduManagedMatchSlot& Slot : MatchSlots)
+	{
+		if (Slot.Selection.IsValid())
+		{
+			Selections.Add(Slot.Selection);
+		}
+	}
+
+	ShooterGameState->InitializeScoreboard(Selections);
+	for (int32 SlotIndex = 0; SlotIndex < MatchSlots.Num(); ++SlotIndex)
+	{
+		RefreshScoreboardOccupant(SlotIndex);
+	}
+}
+
+void AShooterGameMode::RefreshScoreboardOccupant(int32 SlotArrayIndex)
+{
+	if (!MatchSlots.IsValidIndex(SlotArrayIndex))
+	{
+		return;
+	}
+
+	AEduShooterGameState* ShooterGameState = GetGameState<AEduShooterGameState>();
+	if (!ShooterGameState)
+	{
+		return;
+	}
+
+	const FEduManagedMatchSlot& Slot = MatchSlots[SlotArrayIndex];
+	if (Slot.HumanController.IsValid())
+	{
+		ShooterGameState->SetScoreboardOccupant(
+			Slot.Selection,
+			FString::Printf(TEXT("%s Player"), *GetSlotLabel(Slot.Selection)),
+			true);
+		return;
+	}
+
+	if (Slot.AIPawn.IsValid())
+	{
+		ShooterGameState->SetScoreboardOccupant(
+			Slot.Selection,
+			FString::Printf(TEXT("%s AI"), *GetSlotLabel(Slot.Selection)),
+			false);
+		return;
+	}
+
+	ShooterGameState->SetScoreboardOccupant(
+		Slot.Selection,
+		FString::Printf(TEXT("%s Empty"), *GetSlotLabel(Slot.Selection)),
+		false);
+}
+
+FString AShooterGameMode::GetSlotLabel(const FEduTeamSlotSelection& Selection) const
+{
+	const TCHAR* TeamPrefix = Selection.Team == EEduTeam::Red ? TEXT("R") : TEXT("B");
+	return FString::Printf(TEXT("%s%d"), TeamPrefix, Selection.SlotIndex);
 }
 
 void AShooterGameMode::OnManagedAIDestroyed(AActor* DestroyedActor)

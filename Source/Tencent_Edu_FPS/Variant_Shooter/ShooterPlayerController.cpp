@@ -18,9 +18,11 @@
 #include "EduMatchResultWidget.h"
 #include "EduMatchModeWidget.h"
 #include "EduRespawnCountdownWidget.h"
+#include "EduScoreboardWidget.h"
 #include "EduTeamSelectionWidget.h"
 #include "EduKDAWidget.h"
 #include "Tencent_Edu_FPS.h"
+#include "InputCoreTypes.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 
 AShooterPlayerController::AShooterPlayerController()
@@ -51,6 +53,13 @@ AShooterPlayerController::AShooterPlayerController()
 	if (KDAWidgetFinder.Succeeded())
 	{
 		KDAWidgetClass = KDAWidgetFinder.Class;
+	}
+
+	static ConstructorHelpers::FClassFinder<UEduScoreboardWidget> ScoreboardWidgetFinder(
+		TEXT("/Game/Variant_Shooter/UI/WBP_Scoreboard"));
+	if (ScoreboardWidgetFinder.Succeeded())
+	{
+		ScoreboardWidgetClass = ScoreboardWidgetFinder.Class;
 	}
 }
 
@@ -118,6 +127,7 @@ void AShooterPlayerController::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
 	UWorld* World = GetWorld();
 	HideRespawnCountdown();
+	HideScoreboard();
 	if (World)
 	{
 		if (AEduShooterGameState* ShooterGameState = World->GetGameState<AEduShooterGameState>())
@@ -125,6 +135,7 @@ void AShooterPlayerController::EndPlay(EEndPlayReason::Type EndPlayReason)
 			ShooterGameState->OnTeamScoreChanged.RemoveAll(this);
 			ShooterGameState->OnMatchEnded.RemoveAll(this);
 			ShooterGameState->OnMatchSetupChanged.RemoveAll(this);
+			ShooterGameState->OnScoreboardChanged.RemoveAll(this);
 		}
 		if (AEduShooterPlayerState* ShooterPlayerState = BoundStatsPlayerState.Get())
 		{
@@ -159,6 +170,12 @@ void AShooterPlayerController::OnRep_PlayerState()
 void AShooterPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
+
+	if (InputComponent)
+	{
+		InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AShooterPlayerController::ShowScoreboard);
+		InputComponent->BindKey(EKeys::Tab, IE_Released, this, &AShooterPlayerController::HideScoreboard);
+	}
 
 	// only add IMCs for local player controllers
 	if (IsLocalPlayerController())
@@ -579,6 +596,7 @@ void AShooterPlayerController::BindToShooterGameState()
 	ShooterGameState->OnTeamScoreChanged.AddUObject(this, &AShooterPlayerController::OnTeamScoreChanged);
 	ShooterGameState->OnMatchEnded.AddUObject(this, &AShooterPlayerController::OnReplicatedMatchEnded);
 	ShooterGameState->OnMatchSetupChanged.AddUObject(this, &AShooterPlayerController::OnMatchSetupChanged);
+	ShooterGameState->OnScoreboardChanged.AddUObject(this, &AShooterPlayerController::OnScoreboardChanged);
 
 	OnMatchSetupChanged(ShooterGameState->GetMatchMode(), ShooterGameState->HasMatchStarted());
 	OnTeamScoreChanged(
@@ -592,6 +610,8 @@ void AShooterPlayerController::BindToShooterGameState()
 	{
 		OnReplicatedMatchEnded(ShooterGameState->GetWinningTeam());
 	}
+
+	OnScoreboardChanged(ShooterGameState->GetScoreboardEntries());
 }
 
 void AShooterPlayerController::BindToShooterPlayerState()
@@ -629,6 +649,14 @@ void AShooterPlayerController::OnTeamScoreChanged(uint8 TeamByte, int32 Score)
 	if (ShooterUI)
 	{
 		ShooterUI->BP_UpdateScore(TeamByte, Score);
+	}
+}
+
+void AShooterPlayerController::OnScoreboardChanged(const TArray<FEduScoreboardEntry>& Entries)
+{
+	if (ScoreboardWidget)
+	{
+		ScoreboardWidget->SetScoreboardEntries(Entries);
 	}
 }
 
@@ -699,6 +727,45 @@ void AShooterPlayerController::OnMatchSetupChanged(EEduMatchMode MatchMode, bool
 	FInputModeGameOnly InputMode;
 	SetInputMode(InputMode);
 	bShowMouseCursor = false;
+}
+
+void AShooterPlayerController::ShowScoreboard()
+{
+	if (!IsLocalPlayerController() || ScoreboardWidget)
+	{
+		return;
+	}
+
+	if (!ScoreboardWidgetClass)
+	{
+		UE_LOG(LogTencent_Edu_FPS, Warning,
+			TEXT("ScoreboardWidgetClass is not configured. Set it to WBP_Scoreboard in BP_ShooterPlayerController Class Defaults."));
+		return;
+	}
+
+	ScoreboardWidget = CreateWidget<UEduScoreboardWidget>(this, ScoreboardWidgetClass);
+	if (!ScoreboardWidget)
+	{
+		UE_LOG(LogTencent_Edu_FPS, Warning,
+			TEXT("Could not spawn scoreboard widget. Create /Game/Variant_Shooter/UI/WBP_Scoreboard as a child of EduScoreboardWidget."));
+		return;
+	}
+
+	if (const AEduShooterGameState* ShooterGameState = GetWorld()->GetGameState<AEduShooterGameState>())
+	{
+		ScoreboardWidget->SetScoreboardEntries(ShooterGameState->GetScoreboardEntries());
+	}
+
+	ScoreboardWidget->AddToPlayerScreen(175);
+}
+
+void AShooterPlayerController::HideScoreboard()
+{
+	if (ScoreboardWidget)
+	{
+		ScoreboardWidget->RemoveFromParent();
+		ScoreboardWidget = nullptr;
+	}
 }
 
 void AShooterPlayerController::RequestRestartMatch()

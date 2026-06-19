@@ -18,8 +18,10 @@ class UEduMatchModeWidget;
 class UEduTeamSelectionWidget;
 class UEduRespawnCountdownWidget;
 class UEduKDAWidget;
+class UEduScoreboardWidget;
 class AEduShooterPlayerState;
 struct FEduPlayerMatchStats;
+struct FEduScoreboardEntry;
 enum class EEduMatchModeWidgetState : uint8;
 
 /**
@@ -89,6 +91,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
 	TSubclassOf<UEduKDAWidget> KDAWidgetClass;
 
+	/** Type of Tab scoreboard widget to show while held */
+	UPROPERTY(EditDefaultsOnly, Category="Shooter|UI")
+	TSubclassOf<UEduScoreboardWidget> ScoreboardWidgetClass;
+
 	/** Tag to grant the possessed pawn to flag it as the player */
 	UPROPERTY(EditAnywhere, Category="Shooter|Player")
 	FName PlayerPawnTag = FName("Player");
@@ -104,6 +110,10 @@ protected:
 	/** Local player's personal KDA UI */
 	UPROPERTY()
 	TObjectPtr<UEduKDAWidget> KDAWidget;
+
+	/** Local-only scoreboard overlay shown while holding Tab */
+	UPROPERTY()
+	TObjectPtr<UEduScoreboardWidget> ScoreboardWidget;
 
 	/** Team-slot selection UI for the first local player */
 	UPROPERTY()
@@ -189,10 +199,13 @@ protected:
 	void BindToShooterPlayerState();
 
 	void OnTeamScoreChanged(uint8 TeamByte, int32 Score);
+	void OnScoreboardChanged(const TArray<FEduScoreboardEntry>& Entries);
 	void OnPlayerMatchStatsChanged(const FEduPlayerMatchStats& Stats);
 	void OnReplicatedMatchEnded(EEduTeam WinningTeam);
 	void OnMatchSetupChanged(EEduMatchMode MatchMode, bool bMatchStarted);
 	void CompleteTeamSlotSelection(const FEduTeamSlotSelection& Selection);
+	void ShowScoreboard();
+	void HideScoreboard();
 	void UpdateRespawnCountdown();
 	void HideRespawnCountdown();
 
