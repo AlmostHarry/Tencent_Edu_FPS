@@ -21,6 +21,7 @@ Config/DefaultEditorPerProjectUserSettings.ini
 # Project-local scratch content
 Backup/
 Content/Developers/
+客户端大作业/
 
 # Logs, crash dumps, and upgrade artifacts
 *.log
