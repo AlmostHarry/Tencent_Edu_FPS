@@ -46,7 +46,7 @@ protected:
 
 	/** Score required for a team to win the match */
 	UPROPERTY(EditDefaultsOnly, Category="Shooter|Match", meta=(ClampMin=1))
-	int32 WinningScore = 10;
+	int32 WinningScore = 5;
 
 	/** Optional override for the AI class used to fill unoccupied slots */
 	UPROPERTY(EditAnywhere, Category="Shooter|Slots")

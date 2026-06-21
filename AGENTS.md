@@ -17,7 +17,7 @@ The first playable version must include:
 3. Enemies that attack nearby players.
 4. Players can damage and kill enemies.
 5. Kills award score.
-6. A simple victory condition, such as first player to 10 points.
+6. A simple victory condition, such as first player to 5 points.
 7. Multiplayer testing through UE PIE with at least 2 players.
 
 Do not add advanced features before this loop works end to end.
