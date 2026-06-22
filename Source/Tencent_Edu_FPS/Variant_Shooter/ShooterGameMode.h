@@ -95,6 +95,7 @@ public:
 private:
 
 	void InitializeMatchSlots();
+	int32 DetermineExpectedHumanPlayerCount();
 	void TryStartMatch();
 	int32 GetRequiredHumanPlayerCount() const;
 	int32 GetSelectedHumanPlayerCount() const;

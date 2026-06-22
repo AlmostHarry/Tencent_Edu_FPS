@@ -5,9 +5,12 @@
 #include "EduShooterGameState.h"
 #include "ShooterPlayerController.h"
 
-void UEduMatchModeWidget::SetDisplayState(EEduMatchModeWidgetState NewState)
+void UEduMatchModeWidget::SetDisplayState(
+	EEduMatchModeWidgetState NewState,
+	int32 InExpectedHumanPlayerCount)
 {
 	DisplayState = NewState;
+	ExpectedHumanPlayerCount = InExpectedHumanPlayerCount;
 	RefreshDisplay();
 }
 
@@ -46,8 +49,21 @@ void UEduMatchModeWidget::RefreshDisplay()
 		"房主正在选择单人或双人模式。");
 	if (DisplayState == EEduMatchModeWidgetState::HostSelection)
 	{
-		Description = NSLOCTEXT("EduFPS", "ChooseMatchModeDescription",
-			"单人模式：1名玩家和3名AI。双人模式：等待2名玩家选位后加入2名AI。");
+		if (ExpectedHumanPlayerCount == 1)
+		{
+			Description = NSLOCTEXT("EduFPS", "ChooseSinglePlayerDescription",
+				"当前运行配置为1名玩家。选择单人模式后加入3名AI。");
+		}
+		else if (ExpectedHumanPlayerCount == 2)
+		{
+			Description = NSLOCTEXT("EduFPS", "ChooseTwoPlayerDescription",
+				"当前运行配置为2名玩家。双方完成选位后加入2名AI。");
+		}
+		else
+		{
+			Description = NSLOCTEXT("EduFPS", "UnsupportedPlayerCountDescription",
+				"当前模式仅支持将PIE玩家数量设置为1或2。");
+		}
 	}
 	else if (DisplayState == EEduMatchModeWidgetState::SinglePlayerUnavailable)
 	{
@@ -63,11 +79,15 @@ void UEduMatchModeWidget::RefreshDisplay()
 	TitleText->SetText(Title);
 	DescriptionText->SetText(Description);
 
-	const ESlateVisibility ButtonVisibility = DisplayState == EEduMatchModeWidgetState::HostSelection
-		? ESlateVisibility::Visible
-		: ESlateVisibility::Collapsed;
-	SinglePlayerButton->SetVisibility(ButtonVisibility);
-	TwoPlayerButton->SetVisibility(ButtonVisibility);
+	const bool bHostSelection = DisplayState == EEduMatchModeWidgetState::HostSelection;
+	SinglePlayerButton->SetVisibility(
+		bHostSelection && ExpectedHumanPlayerCount == 1
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+	TwoPlayerButton->SetVisibility(
+		bHostSelection && ExpectedHumanPlayerCount == 2
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
 }
 
 void UEduMatchModeWidget::SelectSinglePlayer()

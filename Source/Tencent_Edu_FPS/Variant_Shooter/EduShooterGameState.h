@@ -35,6 +35,10 @@ struct FEduReplicatedMatchState
 
 	UPROPERTY()
 	bool bMatchStarted = false;
+
+	/** Human population expected by the current launch configuration. */
+	UPROPERTY()
+	int32 ExpectedHumanPlayerCount = 1;
 };
 
 USTRUCT(BlueprintType)
@@ -82,6 +86,7 @@ public:
 
 	void SetTeamScore(EEduTeam Team, int32 NewScore);
 	void SetMatchEnded(EEduTeam WinningTeam);
+	void SetExpectedHumanPlayerCount(int32 NewPlayerCount);
 	bool SetMatchMode(EEduMatchMode NewMode);
 	void SetMatchStarted();
 	void InitializeScoreboard(const TArray<FEduTeamSlotSelection>& Selections);
@@ -95,6 +100,7 @@ public:
 	EEduTeam GetWinningTeam() const { return MatchState.WinningTeam; }
 	EEduMatchMode GetMatchMode() const { return MatchState.MatchMode; }
 	bool HasMatchStarted() const { return MatchState.bMatchStarted; }
+	int32 GetExpectedHumanPlayerCount() const { return MatchState.ExpectedHumanPlayerCount; }
 	const TArray<FEduScoreboardEntry>& GetScoreboardEntries() const { return ScoreboardEntries; }
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;

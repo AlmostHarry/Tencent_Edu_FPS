@@ -25,7 +25,7 @@ class TENCENT_EDU_FPS_API UEduMatchModeWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void SetDisplayState(EEduMatchModeWidgetState NewState);
+	void SetDisplayState(EEduMatchModeWidgetState NewState, int32 InExpectedHumanPlayerCount);
 
 protected:
 	virtual void NativeConstruct() override;
@@ -52,4 +52,5 @@ private:
 	TObjectPtr<UButton> TwoPlayerButton;
 
 	EEduMatchModeWidgetState DisplayState = EEduMatchModeWidgetState::WaitingForHost;
+	int32 ExpectedHumanPlayerCount = 0;
 };

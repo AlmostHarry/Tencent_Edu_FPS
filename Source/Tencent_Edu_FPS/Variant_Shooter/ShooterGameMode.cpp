@@ -12,6 +12,7 @@
 #include "EduShooterPlayerState.h"
 #include "AI/ShooterNPC.h"
 #include "AI/ShooterNPCSpawner.h"
+#include "Misc/ConfigCacheIni.h"
 #include "TimerManager.h"
 
 AShooterGameMode::AShooterGameMode()
@@ -24,9 +25,16 @@ void AShooterGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (!GetGameState<AEduShooterGameState>())
+	AEduShooterGameState* ShooterGameState = GetGameState<AEduShooterGameState>();
+	if (!ShooterGameState)
 	{
 		UE_LOG(LogTemp, Error, TEXT("BP_ShooterGameMode must use EduShooterGameState for multiplayer."));
+	}
+	else
+	{
+		const int32 ExpectedHumanPlayerCount = DetermineExpectedHumanPlayerCount();
+		ShooterGameState->SetExpectedHumanPlayerCount(ExpectedHumanPlayerCount);
+		UE_LOG(LogTemp, Log, TEXT("Match setup expects %d human player(s)."), ExpectedHumanPlayerCount);
 	}
 
 	InitializeMatchSlots();
@@ -139,7 +147,26 @@ bool AShooterGameMode::SelectMatchMode(AShooterPlayerController* PlayerControlle
 	}
 
 	AEduShooterGameState* ShooterGameState = GetGameState<AEduShooterGameState>();
-	if (!ShooterGameState || !ShooterGameState->SetMatchMode(MatchMode))
+	if (!ShooterGameState)
+	{
+		return false;
+	}
+
+	const int32 ExpectedHumanPlayerCount = ShooterGameState->GetExpectedHumanPlayerCount();
+	const EEduMatchMode AllowedMatchMode = ExpectedHumanPlayerCount == 1
+		? EEduMatchMode::SinglePlayer
+		: ExpectedHumanPlayerCount == 2
+			? EEduMatchMode::TwoPlayer
+			: EEduMatchMode::Unselected;
+	if (MatchMode != AllowedMatchMode)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("Rejected match mode %d because PIE is configured for %d player(s)."),
+			static_cast<int32>(MatchMode), ExpectedHumanPlayerCount);
+		return false;
+	}
+
+	if (!ShooterGameState->SetMatchMode(MatchMode))
 	{
 		return false;
 	}
@@ -147,6 +174,27 @@ bool AShooterGameMode::SelectMatchMode(AShooterPlayerController* PlayerControlle
 	UE_LOG(LogTemp, Log, TEXT("Listen server selected %s mode."),
 		MatchMode == EEduMatchMode::SinglePlayer ? TEXT("single-player") : TEXT("two-player"));
 	return true;
+}
+
+int32 AShooterGameMode::DetermineExpectedHumanPlayerCount()
+{
+#if WITH_EDITOR
+	const UWorld* World = GetWorld();
+	if (World && World->WorldType == EWorldType::PIE && GConfig)
+	{
+		int32 PIEPlayerCount = 0;
+		if (GConfig->GetInt(
+			TEXT("/Script/UnrealEd.LevelEditorPlaySettings"),
+			TEXT("PlayNumberOfClients"),
+			PIEPlayerCount,
+			GEditorPerProjectIni))
+		{
+			return PIEPlayerCount;
+		}
+	}
+#endif
+
+	return FMath::Max(1, GetNumPlayers());
 }
 
 void AShooterGameMode::ReleasePlayerSlot(AShooterPlayerController* PlayerController)

@@ -14,6 +14,8 @@ server authority, not deterministic frame synchronization.
 ### Match setup
 
 - The listen-server host is the only player allowed to select single-player or two-player mode.
+- In PIE, the configured player count determines the only mode shown to the host: one player exposes
+  single-player mode and two players exposes two-player mode. The server validates the same rule.
 - The selected mode and match-start state live in `EduShooterGameState` and replicate to clients.
 - Team-slot requests are sent to the server and validated by `ShooterGameMode`.
 - Slot ownership is stored per player in `EduShooterPlayerState`.
@@ -181,7 +183,7 @@ When a regression appears after networking:
 
 Recommended settings:
 
-- Players: `2`
+- Players: `1` for single-player or `2` for two-player
 - Net mode: `Play As Listen Server`
 - Run under one process when practical for fast iteration
 - Use separate windows when identifying input ownership

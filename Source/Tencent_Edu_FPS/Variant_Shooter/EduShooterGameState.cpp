@@ -39,6 +39,19 @@ void AEduShooterGameState::SetMatchEnded(EEduTeam WinningTeam)
 	BroadcastMatchState();
 }
 
+void AEduShooterGameState::SetExpectedHumanPlayerCount(int32 NewPlayerCount)
+{
+	if (!HasAuthority() || MatchState.MatchMode != EEduMatchMode::Unselected
+		|| MatchState.ExpectedHumanPlayerCount == NewPlayerCount)
+	{
+		return;
+	}
+
+	MatchState.ExpectedHumanPlayerCount = NewPlayerCount;
+	ForceNetUpdate();
+	BroadcastMatchState();
+}
+
 bool AEduShooterGameState::SetMatchMode(EEduMatchMode NewMode)
 {
 	if (!HasAuthority() || MatchState.MatchMode != EEduMatchMode::Unselected

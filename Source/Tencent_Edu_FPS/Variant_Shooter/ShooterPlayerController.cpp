@@ -363,7 +363,11 @@ void AShooterPlayerController::ShowMatchModeScreen(EEduMatchModeWidgetState Disp
 		return;
 	}
 
-	MatchModeWidget->SetDisplayState(DisplayState);
+	const AEduShooterGameState* ShooterGameState = GetWorld()->GetGameState<AEduShooterGameState>();
+	const int32 ExpectedHumanPlayerCount = ShooterGameState
+		? ShooterGameState->GetExpectedHumanPlayerCount()
+		: 0;
+	MatchModeWidget->SetDisplayState(DisplayState, ExpectedHumanPlayerCount);
 	MatchModeWidget->AddToPlayerScreen(110);
 
 	FInputModeUIOnly InputMode;
