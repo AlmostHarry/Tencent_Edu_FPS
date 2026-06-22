@@ -2,13 +2,15 @@
 
 ## Project Context
 
-This is a UE5 first-person shooter course project for Tencent Game "Kai Ju Yi Ke", client direction.
+This began as a UE5 first-person shooter course project for Tencent Game "Kai Ju Yi Ke", client
+direction. The course assignment is complete, and the repository is now in post-course development.
 
-The MVP is complete and has passed the required single-player and two-player Listen Server PIE
-acceptance checks. Further work should focus on submission preparation and targeted polish without
-expanding the gameplay scope unnecessarily.
+The original MVP is stable and has passed the required single-player and two-player Listen Server PIE
+acceptance checks. It should remain a regression baseline, but it is no longer a scope ceiling. New
+gameplay systems, UI, networking work, refactors, and polish are allowed when requested; preserve the
+working server-authoritative loop and verify affected behavior after each change.
 
-## MVP Scope
+## Original MVP Scope (Completed)
 
 The first playable version must include:
 
@@ -20,7 +22,7 @@ The first playable version must include:
 6. A simple victory condition, such as first player to 5 points.
 7. Multiplayer testing through UE PIE with at least 2 players.
 
-Do not add advanced features before this loop works end to end.
+This list is the completed historical baseline, not a restriction on future development.
 
 ## Current Implementation Status
 
@@ -28,7 +30,7 @@ The current playable direction is a 2v2 team match with four logical slots:
 
 - Red team: `R1`, `R2`
 - Blue team: `B1`, `B2`
-- A local debug UI lets the first local player choose one slot.
+- Each local human player uses the setup UI to choose one available slot.
 - The chosen slot determines the player's team and tagged `PlayerStart`.
 - Unoccupied slots are filled with the existing `BP_ShooterNPC` AI.
 - Managed AI slots respawn after death.
@@ -46,12 +48,17 @@ Team identity is stored with `EEduTeam` on the shared character base:
 - Character materials receive a red or blue runtime tint.
 - Default team colors can be changed in `BP_ShooterCharacter` and `BP_ShooterNPC` Class Defaults under `Team > Visuals`.
 
-An initial server-authoritative multiplayer pass is now implemented:
+The server-authoritative multiplayer architecture is implemented:
 
 - The project uses UE state replication with a listen server, not deterministic frame synchronization.
 - Human slot selection is requested through a server RPC and validated by `ShooterGameMode`.
 - Human players can replace AI occupants in managed match slots.
-- Only the listen-server host selects single-player or two-player mode.
+- Only the listen-server host confirms single-player or two-player mode.
+- In PIE, the native `Players` setting determines the only mode button shown to the host:
+  - `Players = 1` exposes only single-player mode.
+  - `Players = 2` exposes only two-player mode.
+- The expected human-player count is replicated through `EduShooterGameState`, and
+  `ShooterGameMode` rejects a mode request that does not match it.
 - A two-player match does not start until both human players have selected valid slots.
 - Pawns waiting for match setup are hidden, non-colliding, and unable to process gameplay input.
 - Team and character state replicate from the server.
@@ -66,6 +73,11 @@ An initial server-authoritative multiplayer pass is now implemented:
 - Each local player owns their HUD, team selector, and match result UI.
 - A dead human player sees a local respawn countdown driven by the replicated server respawn time.
 - Match restart is requested from a client and performed by server travel.
+- Kills, deaths, and assists are tracked per human player in `EduShooterPlayerState`.
+- Each local player owns a KDA HUD, and the match-result UI receives that player's final KDA.
+- Holding `Tab` displays a replicated four-slot scoreboard containing human and AI K/D/A values.
+- Jump pads preserve their player launch behavior while supporting per-instance fixed launch direction
+  and horizontal/vertical launch speeds for AI.
 
 Important weapon networking constraints:
 
@@ -81,10 +93,10 @@ Important weapon networking constraints:
 - Controller, camera, first-person mesh, recoil presentation, and local HUD operations must be guarded by local
   ownership or a valid controller. Replicated remote pawns do not own a local controller.
 
-The multiplayer MVP has completed a two-player Listen Server PIE acceptance pass. Shooting from both
-players, damage, death, respawn, score, victory, and match restart were verified as working correctly.
-Testing under simulated latency or packet loss remains useful optional network hardening, but it is
-not required for the current course MVP.
+The multiplayer baseline has completed a two-player Listen Server PIE acceptance pass. Shooting from
+both players, damage, death, respawn, score, victory, and match restart were verified as working
+correctly. Testing under simulated latency or packet loss remains a useful network-hardening task for
+future changes.
 
 The current architecture, encountered problems, and regression checklist are documented in
 `Docs/Multiplayer_Networking.md`.
@@ -94,8 +106,12 @@ Important implementation files:
 - `Source/Tencent_Edu_FPS/Variant_Shooter/EduTeamSlotTypes.h`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/EduShooterGameState.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/EduShooterPlayerState.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/UI/EduMatchModeWidget.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/UI/EduTeamSelectionWidget.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/UI/EduRespawnCountdownWidget.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/UI/EduKDAWidget.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/UI/EduScoreboardWidget.*`
+- `Source/Tencent_Edu_FPS/Variant_Shooter/UI/EduMatchResultWidget.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterGameMode.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterPlayerController.*`
 - `Source/Tencent_Edu_FPS/Variant_Shooter/ShooterCharacter.*`
@@ -180,10 +196,11 @@ Do not commit generated local files:
 - local recordings
 
 `Content/XL_FPSPack/` contains imported third-party assets that are not currently
-used by the MVP. Leave this directory untracked for now; do not add or commit it
+used by the playable project. Leave this directory untracked for now; do not add or commit it
 unless the project begins depending on those assets.
 
-If any required `.uasset` or `.umap` file is larger than GitHub's normal file limit, use Git LFS or replace/compress the asset before submission.
+If any required `.uasset` or `.umap` file is larger than GitHub's normal file limit, use Git LFS or
+replace/compress the asset before pushing it.
 
 ### Commit and Push Workflow
 
@@ -209,30 +226,43 @@ If `.git/index.lock` blocks a Git write:
 
 ## Development Priorities
 
-Completed MVP milestones:
+Completed baseline milestones:
 
 1. Build the MVP loop.
 2. Verify it in single-player.
 3. Verify it in PIE multiplayer with 2 players.
 4. Fix blocking replication issues found during acceptance testing.
+5. Add replicated player KDA, local KDA HUD, and final KDA presentation.
+6. Add a replicated four-slot Tab scoreboard for humans and AI.
+7. Restrict the mode-selection UI and server validation to the configured PIE player count.
+8. Add AI-specific jump-pad launch controls and continue gameplay balancing.
 
-Current priorities:
+Current development policy:
 
-1. Add only necessary UI clarity and simple feedback.
-2. Record the demo video.
-3. Write the PDF with implementation notes and GitHub link.
+1. Treat the completed MVP as the regression baseline while allowing the project scope to grow.
+2. Define acceptance criteria for each requested feature or refactor before considering it complete.
+3. Preserve server authority for gameplay state and local ownership for input, camera, HUD, and
+   presentation.
+4. Update architecture notes and regression checks when behavior or networking assumptions change.
+5. Prefer focused, verifiable increments; broad refactors are acceptable when they have a concrete
+   benefit and an appropriate verification plan.
 
-Avoid large refactors, marketplace asset churn, complex menus, matchmaking, advanced weapon systems, and dedicated server deployment unless the MVP is already stable.
+Potential future directions include network-emulation hardening, richer startup/session flows, AI and
+weapon depth, additional maps or modes, and presentation polish. These are options, not standing tasks;
+follow the user's current goal rather than expanding scope automatically.
 
 ## Verification Checklist
 
-The core MVP acceptance pass is complete. The following checklist should still be used for regression
+The baseline acceptance pass is complete. The following checklist should still be used for regression
 testing after gameplay or networking changes:
 
 Before considering the project ready:
 
 - The editor opens the `.uproject` without missing required content.
 - A default map can be played.
+- With PIE `Players = 1`, the host sees only the single-player mode button.
+- With PIE `Players = 2`, the host sees only the two-player mode button.
+- The server rejects a mode request that does not match the configured PIE player count.
 - Two PIE players can join the same session.
 - Only the listen-server host can select the match mode.
 - A two-player match waits until both players select different valid slots.
@@ -243,6 +273,8 @@ Before considering the project ready:
 - Picking up and switching weapons produces no controller-null Blueprint runtime errors.
 - Enemy damage and death are synchronized.
 - Score is synchronized.
+- Human and AI K/D/A values update correctly on the Tab scoreboard.
+- Each human player sees only their own local KDA HUD and final KDA result.
 - Victory state is synchronized.
 - Each dead human player sees the respawn countdown, and it disappears after possessing the new pawn.
 - Respawn and match restart remain synchronized.
